@@ -128,8 +128,7 @@ export function exportToDOCX(analysis: ExportableAnalysis) {
     <body>
       <h1>AgriKMS — Recommended Plants & Field Analysis Report</h1>
       <div class="meta-box">
-        <p><strong>Location:</strong> ${sanitizeHtml(analysis.locationName || "Confirmed Coordinates")}</p>
-        <p><strong>GPS Coordinates:</strong> ${analysis.latitude.toFixed(6)}, ${analysis.longitude.toFixed(6)}</p>
+        <p><strong>Location:</strong> ${sanitizeHtml(analysis.locationName || "Laray, Talisay City, Cebu, Philippines")}</p>
         <p><strong>Date Generated:</strong> ${new Date(analysis.createdAt).toLocaleString()}</p>
       </div>
 
@@ -216,8 +215,7 @@ export function exportToPDF(analysis: ExportableAnalysis) {
       </header>
 
       <div class="meta-grid">
-        <div><strong>Location:</strong><br>${analysis.locationName || "Confirmed Location"}</div>
-        <div><strong>Coordinates:</strong><br>${analysis.latitude.toFixed(6)}, ${analysis.longitude.toFixed(6)}</div>
+        <div><strong>Location:</strong><br>${analysis.locationName || "Laray, Talisay City, Cebu, Philippines"}</div>
         <div><strong>Date:</strong><br>${new Date(analysis.createdAt).toLocaleString()}</div>
       </div>
 

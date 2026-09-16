@@ -1,11 +1,11 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Eye, EyeOff, Leaf, LockKeyhole, Mail } from "lucide-react";
 import PageContainer from "@/components/layout/PageContainer";
 
-export default function LoginPage() {
+function LoginFormContent() {
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -18,31 +18,40 @@ export default function LoginPage() {
 
   const handleGoogleLogin = async () => {
     setError("");
-    const response = await fetch("/api/auth/google");
-    const data = await response.json();
-    if (!response.ok) {
-      setError(data.error ?? "Google sign-in is not configured.");
-      return;
+    try {
+      const response = await fetch("/api/auth/google");
+      const data = await response.json();
+      if (!response.ok) {
+        setError(data.error ?? "Google sign-in is not configured.");
+        return;
+      }
+      window.location.assign(data.url);
+    } catch {
+      setError("Unable to connect to sign-in provider.");
     }
-    window.location.assign(data.url);
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setIsSubmitting(true);
     setError("");
-    const response = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      setError(data.error ?? "Unable to sign in.");
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await response.json().catch(() => ({ error: "Server error (500). Please check database connection on Hostinger." }));
+      if (!response.ok) {
+        setError(data.error ?? "Unable to sign in.");
+        setIsSubmitting(false);
+        return;
+      }
+      router.push(searchParams.get("next") || "/dashboard");
+    } catch {
+      setError("Network error. Please try again.");
       setIsSubmitting(false);
-      return;
     }
-    router.push(searchParams.get("next") || "/dashboard");
   };
 
   return (
@@ -98,7 +107,12 @@ export default function LoginPage() {
               </p>
             </header>
 
-            {(error || googleError) && <p role="alert" className="mb-5 rounded-lg border border-[#e8b9a5] bg-[#fff5ef] px-4 py-3 text-sm text-[#9a3c20]">{error || (googleError === "google_cancelled" ? "Google sign-in was cancelled." : "Google sign-in failed. Please try again or use your email and password.")}</p>}
+            {(error || googleError) && (
+              <p role="alert" className="mb-5 rounded-lg border border-[#e8b9a5] bg-[#fff5ef] px-4 py-3 text-sm text-[#9a3c20]">
+                {error || (googleError === "google_cancelled" ? "Google sign-in was cancelled." : "Google sign-in failed. Please try again or use your email and password.")}
+              </p>
+            )}
+
             <form onSubmit={handleSubmit} className="space-y-5">
               <div>
                 <label htmlFor="email" className="mb-2 block text-sm font-semibold text-[#1A201A]">
@@ -194,5 +208,19 @@ export default function LoginPage() {
         </div>
       </section>
     </PageContainer>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-[#FDFDFB]">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#2D5A27] border-t-transparent" />
+        </div>
+      }
+    >
+      <LoginFormContent />
+    </Suspense>
   );
 }

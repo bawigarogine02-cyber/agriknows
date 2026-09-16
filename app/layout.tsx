@@ -23,7 +23,8 @@ export async function generateMetadata(): Promise<Metadata> {
     const values = Object.fromEntries((rows as Array<{ settingKey: string; settingValue: string }>).map((row) => [row.settingKey, row.settingValue]));
     const title = values.site_title || defaults.title;
     const description = values.site_description || defaults.description;
-    const canonicalUrl = values.canonical_url || defaults.canonicalUrl;
+    const rawCanonical = values.canonical_url || defaults.canonicalUrl;
+    const canonicalUrl = rawCanonical.endsWith("/") ? rawCanonical.slice(0, -1) : rawCanonical;
     return { title, description, metadataBase: new URL(canonicalUrl), alternates: { canonical: "/" }, openGraph: { title, description, type: "website", url: canonicalUrl } };
   } catch {
     return { title: defaults.title, description: defaults.description };

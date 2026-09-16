@@ -16,12 +16,17 @@ export async function POST(request: Request) {
   const email = body.email.trim().toLowerCase();
   const db = getDb();
   if (!db) return NextResponse.json({ error: "Authentication is not configured. Add DATABASE_URL and run the database migration." }, { status: 503 });
-  const [rows] = await db.query("SELECT id, name, email, role, status, password_hash AS passwordHash FROM users WHERE email = ? LIMIT 1", [email]);
-  const record = (rows as Array<{ id: string; name: string; email: string; role: "admin" | "user"; status: "active" | "suspended"; passwordHash: string }>)[0];
-  if (!record || !(await verifyPassword(body.password, record.passwordHash))) return NextResponse.json({ error: "Email or password is incorrect." }, { status: 401 });
-  if (record.status !== "active") return NextResponse.json({ error: "This account is suspended." }, { status: 403 });
-  const user = { id: record.id, email: record.email, name: record.name, role: record.role, status: record.status };
-  const response = NextResponse.json({ user });
-  response.cookies.set(sessionCookie.name, createSessionValue(user), sessionCookie.options);
-  return response;
+  try {
+    const [rows] = await db.query("SELECT id, name, email, role, status, password_hash AS passwordHash FROM users WHERE email = ? LIMIT 1", [email]);
+    const record = (rows as Array<{ id: string; name: string; email: string; role: "admin" | "user"; status: "active" | "suspended"; passwordHash: string }>)[0];
+    if (!record || !(await verifyPassword(body.password, record.passwordHash))) return NextResponse.json({ error: "Email or password is incorrect." }, { status: 401 });
+    if (record.status !== "active") return NextResponse.json({ error: "This account is suspended." }, { status: 403 });
+    const user = { id: record.id, email: record.email, name: record.name, role: record.role, status: record.status };
+    const response = NextResponse.json({ user });
+    response.cookies.set(sessionCookie.name, createSessionValue(user), sessionCookie.options);
+    return response;
+  } catch (err) {
+    console.error("Login server error:", err);
+    return NextResponse.json({ error: "Database connection failed. Check database configuration." }, { status: 500 });
+  }
 }

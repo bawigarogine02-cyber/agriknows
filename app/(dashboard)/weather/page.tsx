@@ -139,7 +139,7 @@ export default function WeatherPage() {
             <p className="text-[10px] font-bold tracking-[2px] text-white/75 uppercase">Live Meteorological Data</p>
             <h1 className="mt-2 text-3xl font-extrabold tracking-tight sm:text-4xl">Farm Weather Dashboard</h1>
             <p className="mt-2 flex items-center gap-1.5 text-sm text-white/90">
-              <MapPin size={16} /> {weather.locationName} ({weather.latitude.toFixed(4)}, {weather.longitude.toFixed(4)})
+              <MapPin size={16} /> {weather.locationName}
             </p>
           </div>
 
