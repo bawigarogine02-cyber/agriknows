@@ -1,0 +1,5 @@
+type EntityRow = Record<string, string | number | null>;
+
+export default function AdminEntityTable({ title, description, columns, rows }: { title: string; description: string; columns: string[]; rows: EntityRow[] }) {
+  return <section className="rounded-xl bg-white shadow-sm"><div className="border-b border-slate-100 p-6"><h3 className="text-xl font-bold">{title}</h3><p className="mt-1 text-sm text-slate-500">{description}</p></div>{rows.length === 0 ? <p className="p-8 text-slate-500">No records found.</p> : <div className="overflow-x-auto"><table className="w-full min-w-[640px] text-left"><thead className="bg-[#f8faf7] text-sm text-slate-500"><tr>{columns.map((column) => <th key={column} className="px-6 py-4 font-semibold">{column}</th>)}</tr></thead><tbody className="divide-y divide-slate-100">{rows.map((row, index) => <tr key={String(row.id ?? index)}>{columns.map((column) => <td key={column} className="px-6 py-4 text-sm">{String(row[column] ?? "-")}</td>)}</tr>)}</tbody></table></div>}</section>;
+}

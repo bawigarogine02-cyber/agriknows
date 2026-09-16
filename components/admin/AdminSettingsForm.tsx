@@ -1,0 +1,13 @@
+"use client";
+
+import { useEffect, useState } from "react";
+
+export default function AdminSettingsForm() {
+  const [settings, setSettings] = useState({ site_title: "", site_description: "", canonical_url: "" });
+  const [message, setMessage] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  useEffect(() => { fetch("/api/admin/settings").then(async (response) => ({ response, data: await response.json() })).then(({ response, data }) => { if (!response.ok) throw new Error(data.error ?? "Unable to load settings."); const values = Object.fromEntries(data.settings.map((item: { settingKey: string; settingValue: string }) => [item.settingKey, item.settingValue])); setSettings((current) => ({ ...current, ...values })); }).catch((error: Error) => setMessage(error.message)).finally(() => setIsLoading(false)); }, []);
+  async function save(event: React.FormEvent) { event.preventDefault(); setMessage(""); const response = await fetch("/api/admin/settings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ settings }) }); const data = await response.json(); setMessage(response.ok ? "Settings saved." : data.error ?? "Unable to save settings."); }
+  if (isLoading) return <div className="rounded-xl bg-white p-8 text-slate-500 shadow-sm">Loading SEO settings...</div>;
+  return <form onSubmit={save} className="max-w-3xl rounded-xl bg-white p-6 shadow-sm sm:p-8"><div className="space-y-6"><label className="block"><span className="block text-sm font-bold">Website title</span><input required value={settings.site_title} onChange={(event) => setSettings({ ...settings, site_title: event.target.value })} className="mt-2 h-12 w-full rounded-lg border border-slate-200 px-4 outline-none focus:border-[#16875f]" /></label><label className="block"><span className="block text-sm font-bold">Default meta description</span><textarea required value={settings.site_description} onChange={(event) => setSettings({ ...settings, site_description: event.target.value })} rows={4} className="mt-2 w-full rounded-lg border border-slate-200 p-4 outline-none focus:border-[#16875f]" /></label><label className="block"><span className="block text-sm font-bold">Canonical URL</span><input required type="url" value={settings.canonical_url} onChange={(event) => setSettings({ ...settings, canonical_url: event.target.value })} className="mt-2 h-12 w-full rounded-lg border border-slate-200 px-4 outline-none focus:border-[#16875f]" /></label></div><div className="mt-8 flex items-center gap-4"><button type="submit" className="rounded-lg bg-[#16875f] px-5 py-3 text-sm font-bold text-white">Save SEO settings</button>{message && <span role="status" className="text-sm text-[#25805e]">{message}</span>}</div></form>;
+}
