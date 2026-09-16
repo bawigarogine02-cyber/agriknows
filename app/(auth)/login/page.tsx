@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Eye, EyeOff, Leaf, LockKeyhole, Mail } from "lucide-react";
 import PageContainer from "@/components/layout/PageContainer";
 
+export const dynamic = "force-dynamic";
+
 function LoginFormContent() {
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
