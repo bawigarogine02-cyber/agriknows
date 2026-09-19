@@ -26,6 +26,7 @@ import {
   Leaf,
   Lightbulb,
   MapPin,
+  MessageSquare,
   Plus,
   RefreshCw,
   Sparkles,
@@ -71,12 +72,12 @@ export default function DashboardHome() {
 
   // Stats state
   const [stats, setStats] = useState({
-    activeCrops: 5,
-    recommendations: 8,
-    knowledgeArticles: 42,
+    activeCrops: 4,
+    recommendations: 2,
+    knowledgeArticles: 3,
     farmHealth: 92,
-    healthLabel: "Good",
-    topCrop: "Bush Green Beans (Phaseolus vulgaris)",
+    healthLabel: "Excellent",
+    topCrop: "Maize (Corn)",
   });
 
   // Weather state
@@ -103,40 +104,58 @@ export default function DashboardHome() {
   const [formSuccess, setFormSuccess] = useState("");
 
   useEffect(() => {
-    // 1. Fetch saved analyses for real statistics
-    fetch("/api/planting-advisor")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (!data || !Array.isArray(data.analyses)) return;
-        const count = data.analyses.length;
-        let totalRecs = 0;
+    // 1. Fetch system statistics from real API endpoints (fields, advisor analyses, knowledge base)
+    Promise.all([
+      fetch("/api/fields").then((r) => (r.ok ? r.json() : null)),
+      fetch("/api/reports").then((r) => (r.ok ? r.json() : null)),
+      fetch("/api/knowledge-base").then((r) => (r.ok ? r.json() : null)),
+    ])
+      .then(([fieldsData, advisorData, kbData]) => {
+        let activeCropsCount = 4;
+        if (fieldsData?.fields && Array.isArray(fieldsData.fields)) {
+          const activeFields = fieldsData.fields.filter((f: { is_harvested?: boolean }) => !f.is_harvested);
+          activeCropsCount = activeFields.length > 0 ? activeFields.length : fieldsData.fields.length;
+        }
+
+        let totalRecs = 2;
         let sumScore = 0;
         let scoreCount = 0;
-        let topCropName = "Bush Green Beans (Phaseolus vulgaris)";
+        let topCropName = "Maize (Corn)";
 
-        data.analyses.forEach((a: { recommendations?: Array<{ score: number; name: string }> }) => {
-          if (Array.isArray(a.recommendations)) {
-            totalRecs += a.recommendations.length;
-            if (a.recommendations[0]?.name) {
-              topCropName = a.recommendations[0].name;
+        if (advisorData?.analyses && Array.isArray(advisorData.analyses)) {
+          let advisorRecCount = 0;
+          advisorData.analyses.forEach((a: { recommendations?: Array<{ score: number; name: string }> }) => {
+            if (Array.isArray(a.recommendations)) {
+              advisorRecCount += a.recommendations.length;
+              if (a.recommendations[0]?.name) {
+                topCropName = a.recommendations[0].name;
+              }
+              a.recommendations.forEach((rec) => {
+                sumScore += rec.score;
+                scoreCount++;
+              });
             }
-            a.recommendations.forEach((rec) => {
-              sumScore += rec.score;
-              scoreCount++;
-            });
+          });
+          if (advisorRecCount > 0) {
+            totalRecs = 2 + advisorRecCount;
           }
-        });
+        }
+
+        let kbArticlesCount = 3;
+        if (kbData?.articles && Array.isArray(kbData.articles)) {
+          kbArticlesCount = kbData.articles.length;
+        }
 
         const avgScore = scoreCount > 0 ? Math.round(sumScore / scoreCount) : 92;
-        let healthLabel = "Good";
+        let healthLabel = "Excellent";
         if (avgScore >= 90) healthLabel = "Excellent";
         else if (avgScore >= 75) healthLabel = "Good";
         else healthLabel = "Moderate";
 
         setStats({
-          activeCrops: 5,
-          recommendations: totalRecs > 0 ? totalRecs : 8,
-          knowledgeArticles: 42,
+          activeCrops: activeCropsCount,
+          recommendations: totalRecs,
+          knowledgeArticles: kbArticlesCount,
           farmHealth: avgScore,
           healthLabel,
           topCrop: topCropName,
@@ -221,7 +240,7 @@ export default function DashboardHome() {
               </button>
               <button
                 type="button"
-                onClick={() => router.push("/planting-advisor")}
+                onClick={() => router.push("/consultations")}
                 className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white/90 px-4 py-2.5 text-xs font-bold text-[#17604d] hover:bg-white"
               >
                 <Lightbulb size={16} /> Get Recommendations
@@ -285,7 +304,7 @@ export default function DashboardHome() {
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              router.push("/weather");
+              setActiveModal("weatherDetail");
             }}
             className="flex w-full items-center justify-end gap-1 px-5 py-3 text-xs font-bold text-[#18765b] hover:underline"
           >
@@ -468,7 +487,7 @@ export default function DashboardHome() {
 
             <button
               type="button"
-              onClick={() => router.push("/planting-advisor")}
+              onClick={() => router.push("/consultations")}
               className="flex min-h-[72px] flex-col items-center justify-center gap-2 rounded-xl border border-slate-200 p-2 text-center transition hover:border-[#9dd9bf] hover:bg-[#f5fbf7]"
             >
               <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#f0edff] text-[#6857c9]">
@@ -622,21 +641,11 @@ export default function DashboardHome() {
                 type="button"
                 onClick={() => {
                   setActiveModal(null);
-                  router.push("/planting-advisor");
+                  router.push("/consultations");
                 }}
                 className="inline-flex items-center gap-1.5 rounded-xl bg-[#16875f] px-5 py-2.5 text-xs font-bold text-white hover:bg-[#0c704d]"
               >
-                <Sparkles size={15} /> Run New Analysis
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveModal(null);
-                  router.push("/planting-advisor/history");
-                }}
-                className="text-xs font-bold text-[#16875f] hover:underline"
-              >
-                View Saved History →
+                <MessageSquare size={15} /> Get Consultation
               </button>
             </div>
           </div>
@@ -658,7 +667,7 @@ export default function DashboardHome() {
           >
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h2 className="text-xl font-bold text-[#123d35] flex items-center gap-2">
-                <BookOpen className="text-[#815cc6]" size={22} /> Agricultural Knowledge Base (42 Articles)
+                <BookOpen className="text-[#815cc6]" size={22} /> Agricultural Knowledge Base ({stats.knowledgeArticles} Articles)
               </h2>
               <button
                 type="button"
@@ -701,7 +710,7 @@ export default function DashboardHome() {
                 }}
                 className="rounded-xl bg-[#815cc6] px-5 py-2.5 text-xs font-bold text-white hover:bg-[#6c48ab]"
               >
-                Browse All 42 Knowledge Articles →
+                Browse All {stats.knowledgeArticles} Knowledge Articles →
               </button>
             </div>
           </div>

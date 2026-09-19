@@ -28,6 +28,7 @@ export default function DashboardShell({ children, user }: DashboardShellProps) 
         <DashboardSidebar
           isOpen={isSidebarOpen}
           onClose={() => setIsSidebarOpen(false)}
+          userRole={user.role}
         />
 
         <div className="min-w-0 flex-1">

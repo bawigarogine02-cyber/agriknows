@@ -19,7 +19,8 @@ export async function generateMetadata(): Promise<Metadata> {
   try {
     const db = getDb();
     if (!db) return { title: defaults.title, description: defaults.description, metadataBase: new URL(defaults.canonicalUrl) };
-    const [rows] = await db.query("SELECT setting_key AS settingKey, setting_value AS settingValue FROM site_settings WHERE setting_key IN ('site_title', 'site_description', 'canonical_url')");
+    const queryResult = await db.query("SELECT setting_key AS settingKey, setting_value AS settingValue FROM site_settings WHERE setting_key IN ('site_title', 'site_description', 'canonical_url')");
+    const rows = Array.isArray(queryResult) && Array.isArray(queryResult[0]) ? queryResult[0] : [];
     const values = Object.fromEntries((rows as Array<{ settingKey: string; settingValue: string }>).map((row) => [row.settingKey, row.settingValue]));
     const title = values.site_title || defaults.title;
     const description = values.site_description || defaults.description;
@@ -27,11 +28,11 @@ export async function generateMetadata(): Promise<Metadata> {
     const canonicalUrl = rawCanonical.endsWith("/") ? rawCanonical.slice(0, -1) : rawCanonical;
     return { title, description, metadataBase: new URL(canonicalUrl), alternates: { canonical: "/" }, openGraph: { title, description, type: "website", url: canonicalUrl } };
   } catch {
-    return { title: defaults.title, description: defaults.description };
+    return { title: defaults.title, description: defaults.description, metadataBase: new URL(defaults.canonicalUrl) };
   }
 }
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html
       lang="en"

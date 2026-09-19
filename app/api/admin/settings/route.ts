@@ -7,7 +7,8 @@ export async function GET() {
   if (access.response) return access.response;
   const db = getDb();
   if (!db) return NextResponse.json({ error: "Database is not configured." }, { status: 503 });
-  const [rows] = await db.query("SELECT setting_key AS settingKey, setting_value AS settingValue FROM site_settings ORDER BY setting_key");
+  const queryResult = await db.query("SELECT setting_key AS settingKey, setting_value AS settingValue FROM site_settings ORDER BY setting_key");
+  const rows = Array.isArray(queryResult) && Array.isArray(queryResult[0]) ? queryResult[0] : [];
   return NextResponse.json({ settings: rows });
 }
 

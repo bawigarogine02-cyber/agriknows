@@ -1,15 +1,15 @@
 "use client";
 
 import {
+  BarChart3,
   BookOpen,
   ChevronRight,
-  Cloud,
-  Flower2,
-  Gauge,
+  Compass,
+  FileText,
   House,
-  Lightbulb,
-  MapPinned,
-  Settings,
+  Leaf,
+  MessageSquare,
+  ShieldCheck,
   Sprout,
   X,
 } from "lucide-react";
@@ -19,28 +19,30 @@ import { usePathname } from "next/navigation";
 interface DashboardSidebarProps {
   isOpen: boolean;
   onClose: () => void;
+  userRole?: string;
 }
 
 type NavigationItem = {
   label: string;
   href: string;
   icon: typeof House;
+  adminOnly?: boolean;
 };
 
 const navigationItems: NavigationItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: House },
-  { label: "Crop Information", href: "/crop-information", icon: Flower2 },
-  { label: "Agricultural Knowledge", href: "/agricultural-knowledge", icon: BookOpen },
-  { label: "Smart Recommendations", href: "/smart-recommendations", icon: Lightbulb },
-  { label: "Planting Advisor", href: "/planting-advisor", icon: MapPinned },
-  { label: "Analysis History", href: "/planting-advisor/history", icon: Gauge },
-  { label: "Weather", href: "/weather", icon: Cloud },
-  { label: "Reports", href: "/reports", icon: Gauge },
-  { label: "Settings", href: "/settings", icon: Settings },
+  { label: "Farms & Fields", href: "/farms", icon: Leaf },
+  { label: "Decision Support", href: "/decision-support", icon: Compass },
+  { label: "Knowledge Base", href: "/knowledge-base", icon: BookOpen },
+  { label: "Consultations", href: "/consultations", icon: MessageSquare },
+  { label: "Reports & Analytics", href: "/reports", icon: BarChart3 },
+  { label: "System Audit Logs", href: "/admin", icon: ShieldCheck, adminOnly: true },
 ];
 
-export default function DashboardSidebar({ isOpen, onClose }: DashboardSidebarProps) {
+export default function DashboardSidebar({ isOpen, onClose, userRole }: DashboardSidebarProps) {
   const pathname = usePathname();
+
+  const filteredItems = navigationItems.filter(item => !item.adminOnly || userRole === "admin");
 
   return (
     <aside
@@ -83,8 +85,8 @@ export default function DashboardSidebar({ isOpen, onClose }: DashboardSidebarPr
       </div>
 
       <nav aria-label="Primary navigation" className="space-y-1">
-        {navigationItems.map(({ label, href, icon: Icon }) => {
-          const isActive = pathname === href;
+        {filteredItems.map(({ label, href, icon: Icon }) => {
+          const isActive = pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
 
           return (
             <Link
@@ -122,13 +124,13 @@ export default function DashboardSidebar({ isOpen, onClose }: DashboardSidebarPr
             <p className="mt-2 text-base leading-6 text-emerald-50/75">
               Explore farming guides and get support from our agricultural experts.
             </p>
-            <button
-              type="button"
+            <Link
+              href="/consultations"
               className="mt-4 flex items-center gap-2 rounded-md bg-white/10 px-3 py-2 text-base font-semibold text-white hover:bg-white/20"
             >
-              Visit Help Center
+              Consult an Expert
               <ChevronRight size={13} />
-            </button>
+            </Link>
           </>
         )}
       </div>

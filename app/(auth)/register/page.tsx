@@ -2,20 +2,10 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff, Leaf, LockKeyhole, Mail, UserRound } from "lucide-react";
+import { Eye, EyeOff, Leaf, LockKeyhole, Mail, MapPin, UserRound } from "lucide-react";
 import PageContainer from "@/components/layout/PageContainer";
 
 const roles = ["Farmer", "Agronomist", "Researcher", "Agricultural Consultant"];
-const countries = [
-  "Select your country",
-  "Kenya",
-  "Nigeria",
-  "South Africa",
-  "Tanzania",
-  "United States",
-  "United Kingdom",
-  "Other",
-];
 
 export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
@@ -164,6 +154,7 @@ export default function RegisterPage() {
                   </label>
                   <select
                     id="role"
+                    name="role"
                     defaultValue=""
                     required
                     className="h-12 w-full rounded-lg border border-[#E2E8E1] bg-white px-4 text-sm text-[#5C635A] outline-none focus:border-[#2D5A27] focus:ring-2 focus:ring-[#2D5A27]/15"
@@ -179,25 +170,20 @@ export default function RegisterPage() {
                   </select>
                 </div>
                 <div>
-                  <label htmlFor="country" className="mb-2 block text-sm font-semibold text-[#1A201A]">
-                    Country
+                  <label htmlFor="address" className="mb-2 block text-sm font-semibold text-[#1A201A]">
+                    Address
                   </label>
-                  <select
-                    id="country"
-                    defaultValue="Select your country"
-                    required
-                    className="h-12 w-full rounded-lg border border-[#E2E8E1] bg-white px-4 text-sm text-[#5C635A] outline-none focus:border-[#2D5A27] focus:ring-2 focus:ring-[#2D5A27]/15"
-                  >
-                    {countries.map((country) => (
-                      <option
-                        key={country}
-                        value={country}
-                        disabled={country === "Select your country"}
-                      >
-                        {country}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="relative">
+                    <MapPin className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#7B8578]" aria-hidden="true" />
+                    <input
+                      id="address"
+                      type="text"
+                      autoComplete="street-address"
+                      placeholder="Enter your address"
+                      name="address"
+                      className="h-12 w-full rounded-lg border border-[#E2E8E1] bg-white pl-11 pr-4 text-sm outline-none transition focus:border-[#2D5A27] focus:ring-2 focus:ring-[#2D5A27]/15"
+                    />
+                  </div>
                 </div>
               </div>
 
