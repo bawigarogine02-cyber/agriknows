@@ -9,5 +9,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
     redirect("/login?next=/dashboard");
   }
 
+  if (user.needsOnboarding) {
+    redirect("/complete-profile");
+  }
+
   return <DashboardShell user={user}>{children}</DashboardShell>;
 }

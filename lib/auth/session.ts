@@ -4,7 +4,15 @@ import { cookies } from "next/headers";
 const COOKIE_NAME = "agriknow_session";
 const SESSION_SECRET = process.env.SESSION_SECRET;
 
-export type SessionUser = { id: string; email: string; name: string; role: "farmer" | "researcher" | "admin"; status: "active" | "suspended" };
+export type SessionUser = {
+  id: string;
+  email: string;
+  name: string;
+  role: "farmer" | "researcher" | "admin";
+  status: "active" | "suspended";
+  address?: string;
+  needsOnboarding?: boolean;
+};
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 30;
 
 function sign(value: string) {
@@ -31,7 +39,15 @@ export function verifySessionValue(value: string | undefined): SessionUser | nul
     const validRole: "farmer" | "researcher" | "admin" = ["farmer", "researcher", "admin"].includes(parsed.role)
       ? (parsed.role as "farmer" | "researcher" | "admin")
       : "farmer";
-    return { id: parsed.id, email: parsed.email, name: parsed.name, role: validRole, status: parsed.status === "suspended" ? "suspended" : "active" };
+    return {
+      id: parsed.id,
+      email: parsed.email,
+      name: parsed.name,
+      role: validRole,
+      status: parsed.status === "suspended" ? "suspended" : "active",
+      address: parsed.address || "",
+      needsOnboarding: Boolean(parsed.needsOnboarding),
+    };
   } catch {
     return null;
   }

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { hashPassword } from "@/lib/auth/password";
-import { createSessionValue, sessionCookie } from "@/lib/auth/session";
+import { createSessionValue, sessionCookie, type SessionUser } from "@/lib/auth/session";
 import { getDb } from "@/lib/db/pool";
 
 type GoogleTokenResponse = { access_token?: string };
@@ -55,21 +55,47 @@ export async function GET(request: Request) {
     if (!profileResponse.ok || !profile.email || !profile.name) throw new Error("Google profile is incomplete");
 
     const email = profile.email.trim().toLowerCase();
-    const [rows] = await db.query("SELECT id, name, email, role, status FROM users WHERE email = ? LIMIT 1", [email]);
-    const record = (rows as Array<{ id: string; name: string; email: string; role: "farmer" | "researcher" | "admin" | "user"; status: "active" | "suspended" }>)[0];
+    const [rows] = await db.query("SELECT id, name, email, role, status, address FROM users WHERE email = ? LIMIT 1", [email]);
+    const record = (rows as Array<{ id: string; name: string; email: string; role: "farmer" | "researcher" | "admin" | "user"; status: "active" | "suspended"; address?: string | null }>)[0];
 
-    let user: { id: string; name: string; email: string; role: "farmer" | "researcher" | "admin"; status: "active" | "suspended" };
+    let user: SessionUser;
 
     if (!record) {
-      user = { id: randomUUID(), name: profile.name.trim(), email, role: "farmer", status: "active" };
-      await db.execute("INSERT INTO users (id, name, email, role, status, password_hash) VALUES (?, ?, ?, ?, ?, ?)", [user.id, user.name, user.email, user.role, user.status, await hashPassword(randomUUID())]);
+      const newUserId = randomUUID();
+      user = {
+        id: newUserId,
+        name: profile.name.trim(),
+        email,
+        role: "farmer",
+        status: "active",
+        address: "",
+        needsOnboarding: true,
+      };
+      await db.execute(
+        "INSERT INTO users (id, name, email, role, status, password_hash, address) VALUES (?, ?, ?, ?, ?, ?, NULL)",
+        [user.id, user.name, user.email, user.role, user.status, await hashPassword(randomUUID())]
+      );
     } else {
-      const assignedRole: "farmer" | "researcher" | "admin" = ["farmer", "researcher", "admin"].includes(record.role) ? (record.role as "farmer" | "researcher" | "admin") : "farmer";
-      user = { id: record.id, name: record.name, email: record.email, role: assignedRole, status: record.status };
+      const assignedRole: "farmer" | "researcher" | "admin" = ["farmer", "researcher", "admin"].includes(record.role)
+        ? (record.role as "farmer" | "researcher" | "admin")
+        : "farmer";
+      const needsOnboarding = !record.address || record.address.trim() === "";
+
+      user = {
+        id: record.id,
+        name: record.name,
+        email: record.email,
+        role: assignedRole,
+        status: record.status,
+        address: record.address || "",
+        needsOnboarding,
+      };
     }
 
     if (user.status !== "active") return NextResponse.redirect(`${baseUrl}/login?error=account_suspended`);
-    const response = NextResponse.redirect(`${baseUrl}/dashboard`);
+    
+    const destinationUrl = user.needsOnboarding ? `${baseUrl}/complete-profile` : `${baseUrl}/dashboard`;
+    const response = NextResponse.redirect(destinationUrl);
     response.cookies.set(sessionCookie.name, createSessionValue(user), sessionCookie.options);
     response.cookies.set("agriknow_google_oauth_state", "", {
       httpOnly: true,

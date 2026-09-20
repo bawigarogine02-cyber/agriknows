@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Leaf, LockKeyhole, Mail, MapPin, UserRound } from "lucide-react";
 import PageContainer from "@/components/layout/PageContainer";
 
-const roles = ["Farmer", "Agronomist", "Researcher", "Agricultural Consultant"];
+const roles = ["Farmer", "Researcher"];
 
 export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
