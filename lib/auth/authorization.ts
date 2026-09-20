@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { getSession, type SessionUser } from "@/lib/auth/session";
 
-export async function requireAdmin(): Promise<
+export type AllowedRole = "farmer" | "researcher" | "admin";
+
+export async function requireAuth(): Promise<
   | { user: SessionUser; response: null }
   | { user: null; response: NextResponse }
 > {
@@ -14,12 +16,53 @@ export async function requireAdmin(): Promise<
     };
   }
 
-  if (user.role !== "admin" || user.status !== "active") {
+  if (user.status === "suspended") {
     return {
       user: null,
-      response: NextResponse.json({ error: "Administrator access required." }, { status: 403 }),
+      response: NextResponse.json({ error: "Account suspended. Access denied." }, { status: 403 }),
     };
   }
 
   return { user, response: null };
+}
+
+export async function requireRole(allowedRoles: AllowedRole[]): Promise<
+  | { user: SessionUser; response: null }
+  | { user: null; response: NextResponse }
+> {
+  const auth = await requireAuth();
+  if (auth.response) return auth;
+
+  if (!allowedRoles.includes(auth.user.role)) {
+    return {
+      user: null,
+      response: NextResponse.json(
+        { error: `Forbidden. Requires one of the following roles: ${allowedRoles.join(", ")}.` },
+        { status: 403 }
+      ),
+    };
+  }
+
+  return { user: auth.user, response: null };
+}
+
+export async function requireFarmer(): Promise<
+  | { user: SessionUser; response: null }
+  | { user: null; response: NextResponse }
+> {
+  return requireRole(["farmer", "admin"]);
+}
+
+export async function requireResearcher(): Promise<
+  | { user: SessionUser; response: null }
+  | { user: null; response: NextResponse }
+> {
+  return requireRole(["researcher", "admin"]);
+}
+
+export async function requireAdmin(): Promise<
+  | { user: SessionUser; response: null }
+  | { user: null; response: NextResponse }
+> {
+  return requireRole(["admin"]);
 }

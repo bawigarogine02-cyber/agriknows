@@ -56,11 +56,16 @@ export async function GET(request: Request) {
 
     const email = profile.email.trim().toLowerCase();
     const [rows] = await db.query("SELECT id, name, email, role, status FROM users WHERE email = ? LIMIT 1", [email]);
-    let user = (rows as Array<{ id: string; name: string; email: string; role: "admin" | "user"; status: "active" | "suspended" }>)[0];
+    const record = (rows as Array<{ id: string; name: string; email: string; role: "farmer" | "researcher" | "admin" | "user"; status: "active" | "suspended" }>)[0];
 
-    if (!user) {
-      user = { id: randomUUID(), name: profile.name.trim(), email, role: "user", status: "active" };
+    let user: { id: string; name: string; email: string; role: "farmer" | "researcher" | "admin"; status: "active" | "suspended" };
+
+    if (!record) {
+      user = { id: randomUUID(), name: profile.name.trim(), email, role: "farmer", status: "active" };
       await db.execute("INSERT INTO users (id, name, email, role, status, password_hash) VALUES (?, ?, ?, ?, ?, ?)", [user.id, user.name, user.email, user.role, user.status, await hashPassword(randomUUID())]);
+    } else {
+      const assignedRole: "farmer" | "researcher" | "admin" = ["farmer", "researcher", "admin"].includes(record.role) ? (record.role as "farmer" | "researcher" | "admin") : "farmer";
+      user = { id: record.id, name: record.name, email: record.email, role: assignedRole, status: record.status };
     }
 
     if (user.status !== "active") return NextResponse.redirect(`${baseUrl}/login?error=account_suspended`);

@@ -17,8 +17,7 @@ ALTER TABLE fields
   ADD COLUMN soil_ph DECIMAL(3,1) DEFAULT 6.5 AFTER planting_date,
   ADD COLUMN organic_matter DECIMAL(4,1) DEFAULT 2.5 AFTER soil_ph,
   ADD COLUMN water_source VARCHAR(100) DEFAULT 'Rainfed' AFTER organic_matter,
-  ADD COLUMN is_harvested BOOLEAN DEFAULT FALSE AFTER water_source,
-  ADD CONSTRAINT fk_fields_crop FOREIGN KEY (current_crop_id) REFERENCES crops(id) ON DELETE SET NULL;
+  ADD COLUMN is_harvested BOOLEAN DEFAULT FALSE AFTER water_source;
 
 -- 4. Enhance Crops table with agronomic target bounds
 ALTER TABLE crops
@@ -38,9 +37,7 @@ CREATE TABLE IF NOT EXISTS pests_diseases (
   symptoms TEXT NOT NULL,
   prevention TEXT NOT NULL,
   treatment TEXT NOT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT fk_pests_crop FOREIGN KEY (crop_id) REFERENCES crops(id) ON DELETE CASCADE,
-  INDEX idx_pests_type (type)
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 6. Enhance Recommendations table for decision support parameters
@@ -63,10 +60,7 @@ CREATE TABLE IF NOT EXISTS consultations (
   status ENUM('Pending Review', 'Answered', 'Closed') NOT NULL DEFAULT 'Pending Review',
   image_url TEXT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  CONSTRAINT fk_consultations_farmer FOREIGN KEY (farmer_id) REFERENCES users(id) ON DELETE CASCADE,
-  CONSTRAINT fk_consultations_researcher FOREIGN KEY (researcher_id) REFERENCES users(id) ON DELETE SET NULL,
-  INDEX idx_consultations_status (status)
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
 -- 8. Create Consultation Replies table
@@ -75,9 +69,7 @@ CREATE TABLE IF NOT EXISTS consultation_replies (
   consultation_id CHAR(36) NOT NULL,
   sender_id CHAR(36) NOT NULL,
   message LONGTEXT NOT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT fk_replies_consultation FOREIGN KEY (consultation_id) REFERENCES consultations(id) ON DELETE CASCADE,
-  CONSTRAINT fk_replies_sender FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 9. Create Research Publications table
@@ -90,8 +82,7 @@ CREATE TABLE IF NOT EXISTS research_publications (
   crop_type VARCHAR(120) NOT NULL,
   soil_type VARCHAR(100) NOT NULL,
   publication_date DATE NOT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT fk_pubs_researcher FOREIGN KEY (researcher_id) REFERENCES users(id) ON DELETE CASCADE
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 10. Create Audit Logs table
@@ -103,7 +94,5 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   details TEXT NULL,
   ip_address VARCHAR(45) NULL,
   device_info VARCHAR(255) NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT fk_audit_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
-  INDEX idx_audit_date (created_at DESC)
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

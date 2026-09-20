@@ -11,7 +11,9 @@ import {
   MessageSquare,
   ShieldCheck,
   Sprout,
+  Users,
   X,
+  UserCheck,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -19,30 +21,54 @@ import { usePathname } from "next/navigation";
 interface DashboardSidebarProps {
   isOpen: boolean;
   onClose: () => void;
-  userRole?: string;
+  userRole?: "farmer" | "researcher" | "admin" | string;
 }
 
 type NavigationItem = {
   label: string;
   href: string;
   icon: typeof House;
-  adminOnly?: boolean;
+  allowedRoles?: Array<"farmer" | "researcher" | "admin">;
 };
 
-const navigationItems: NavigationItem[] = [
+// Strict Role-Based Sidebar Navigation Configuration
+const farmerNavItems: NavigationItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: House },
+  { label: "Crop Advisor", href: "/crop-advisor", icon: Sprout },
   { label: "Farms & Fields", href: "/farms", icon: Leaf },
   { label: "Decision Support", href: "/decision-support", icon: Compass },
   { label: "Knowledge Base", href: "/knowledge-base", icon: BookOpen },
   { label: "Consultations", href: "/consultations", icon: MessageSquare },
+  { label: "Profile", href: "/profile", icon: FileText },
+];
+
+const researcherNavItems: NavigationItem[] = [
+  { label: "Dashboard", href: "/dashboard", icon: House },
+  { label: "My Research & Studies", href: "/agricultural-knowledge", icon: FileText },
+  { label: "Knowledge Base", href: "/knowledge-base", icon: BookOpen },
+  { label: "Farmer Consultations", href: "/consultations", icon: MessageSquare },
   { label: "Reports & Analytics", href: "/reports", icon: BarChart3 },
-  { label: "System Audit Logs", href: "/admin", icon: ShieldCheck, adminOnly: true },
+  { label: "Profile", href: "/profile", icon: FileText },
+];
+
+const adminNavItems: NavigationItem[] = [
+  { label: "Dashboard", href: "/dashboard", icon: House },
+  { label: "User Governance", href: "/admin/users", icon: Users },
+  { label: "Research Management", href: "/admin/knowledge", icon: BookOpen },
+  { label: "Crop Reference Data", href: "/admin/crops", icon: Sprout },
+  { label: "Crop Advisor Activity", href: "/admin/recommendations", icon: Compass },
+  { label: "Farm Parcels Oversight", href: "/admin/farms", icon: Leaf },
+  { label: "Reports & Analytics", href: "/admin/reports", icon: BarChart3 },
+  { label: "System Audit Logs", href: "/admin", icon: ShieldCheck },
+  { label: "Site & SEO Settings", href: "/admin/settings", icon: ShieldCheck },
 ];
 
 export default function DashboardSidebar({ isOpen, onClose, userRole }: DashboardSidebarProps) {
   const pathname = usePathname();
 
-  const filteredItems = navigationItems.filter(item => !item.adminOnly || userRole === "admin");
+  const role = userRole === "admin" ? "admin" : userRole === "researcher" ? "researcher" : "farmer";
+
+  const navItems = role === "admin" ? adminNavItems : role === "researcher" ? researcherNavItems : farmerNavItems;
 
   return (
     <aside
@@ -61,11 +87,11 @@ export default function DashboardSidebar({ isOpen, onClose, userRole }: Dashboar
           {isOpen ? (
             <>
               <p className="text-[23px] font-extrabold tracking-[-0.8px]">AgriKMS</p>
-              <p className="mt-1 text-base leading-[1.35] text-emerald-100/75">
-                Agricultural Knowledge
-                <br />
-                Management System
-              </p>
+              <div className="mt-1 flex items-center gap-1.5">
+                <span className="rounded-md bg-emerald-400/20 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-emerald-200 border border-emerald-300/30">
+                  {role} Portal
+                </span>
+              </div>
             </>
           ) : (
             <Sprout className="h-8 w-8 text-emerald-100" aria-label="AgriKMS" />
@@ -85,7 +111,7 @@ export default function DashboardSidebar({ isOpen, onClose, userRole }: Dashboar
       </div>
 
       <nav aria-label="Primary navigation" className="space-y-1">
-        {filteredItems.map(({ label, href, icon: Icon }) => {
+        {navItems.map(({ label, href, icon: Icon }) => {
           const isActive = pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
 
           return (
@@ -120,9 +146,19 @@ export default function DashboardSidebar({ isOpen, onClose, userRole }: Dashboar
 
         {isOpen && (
           <>
-            <h2 className="mt-3 text-base font-bold">Need help?</h2>
+            <h2 className="mt-3 text-base font-bold">
+              {role === "admin"
+                ? "Admin Help & Docs"
+                : role === "researcher"
+                ? "Researcher Portal"
+                : "Farmer Support"}
+            </h2>
             <p className="mt-2 text-base leading-6 text-emerald-50/75">
-              Explore farming guides and get support from our agricultural experts.
+              {role === "admin"
+                ? "Manage system governance, user roles, and website SEO."
+                : role === "researcher"
+                ? "Publish crop & soil research to enrich recommendations."
+                : "Get expert advice and soil recommendations."}
             </p>
             <Link
               href="/consultations"

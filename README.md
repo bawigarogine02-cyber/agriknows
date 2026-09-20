@@ -70,7 +70,7 @@ Then open http://localhost:3000
 
 ## Planting Advisor setup
 
-1. Create a MySQL database and run `database/migrations/001_planting_advisor.sql`, followed by `database/migrations/002_dashboard.sql`, `database/migrations/003_admin_access.sql`, and `database/migrations/004_site_settings.sql`.
+1. Create a MySQL database and run `database/migrations/001_planting_advisor.sql`, followed by `database/migrations/002_dashboard.sql`, `database/migrations/003_admin_access.sql`, `database/migrations/004_site_settings.sql`, `database/migrations/005_agrikms_modules.sql`, and finally `database/migrations/006_constraints.sql`.
 2. Copy `.env.example` to `.env.local` and set `DATABASE_URL` and a long random `SESSION_SECRET`.
 3. Register or log in through `/register` or `/login`. Authentication uses the `users` table, hashed passwords, and an HTTP-only session cookie.
 4. Add `GEMINI_API_KEY` to enable the constrained Gemini 3 Flash image observation step. Crop scoring remains deterministic and uses the structured requirements in the database.

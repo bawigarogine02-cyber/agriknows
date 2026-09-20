@@ -49,7 +49,7 @@ export default function InquiryThreadList({ consultations, onReplyAdded }: Inqui
         <div className="space-y-3">
           {consultations.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-center text-xs text-slate-500">
-              No farmer inquiries submitted yet. Click "Ask an Expert" above to create an inquiry.
+              No farmer inquiries submitted yet. Click &quot;Ask an Expert&quot; above to create an inquiry.
             </div>
           ) : (
             consultations.map((c) => (

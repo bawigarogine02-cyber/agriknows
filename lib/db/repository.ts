@@ -128,7 +128,123 @@ export interface AuditLog {
   created_at: string;
 }
 
+export interface ImageObservations {
+  visuallyObserved: string[];
+  estimatedProperties: string[];
+  requiresLabTesting: string[];
+  soilColor?: string;
+  soilTexture?: string;
+  moistureLevel?: string;
+  terrainType?: string;
+  vegetationNotes?: string;
+  rawAnalysisText?: string;
+}
+
+export interface InternalResearchRef {
+  title: string;
+  author: string;
+  categoryOrCrop: string;
+  summary: string;
+  relevanceReason: string;
+  url?: string;
+}
+
+export interface ExternalWebSource {
+  title: string;
+  sourceName: string;
+  url: string;
+  keyTakeaway: string;
+  topic: string;
+}
+
+export interface EnvironmentalSnapshot {
+  locationName: string;
+  latitude?: number;
+  longitude?: number;
+  currentTempC?: number;
+  soilTempC?: number;
+  rainfallMm?: number;
+  climateZone?: string;
+}
+
+export interface SuitabilityFactors {
+  soilCompatibility: number;
+  moistureCompatibility: number;
+  temperatureCompatibility: number;
+  terrainCompatibility: number;
+  researchEvidence: number;
+}
+
+export interface PlantRecommendation {
+  plantName: string;
+  cropCategory: string;
+  estimatedSuitability: number;
+  suitabilityRating: "Highly Suitable" | "Moderately Suitable" | "Marginally Suitable" | "Unsuitable";
+  reasons: string[];
+  supportingObservations: string[];
+  matchingFactors: string[];
+  potentialProblems: string[];
+  requiredImprovements: string[];
+  waterRequirement: string;
+  temperatureRequirement: string;
+  soilRequirement: string;
+  idealPhRange: string;
+  growthDays: number;
+  companionCrops: string;
+  researcherNotes: string[];
+  scoreBreakdown: SuitabilityFactors;
+}
+
+export interface LessSuitablePlant {
+  plantName: string;
+  estimatedSuitability: number;
+  suitabilityRating: string;
+  bottleneckFactors: string[];
+  explanation: string;
+  requiredRemediation: string[];
+}
+
+export interface ConfidenceAssessment {
+  overallLevel: "High" | "Medium" | "Limited";
+  confidenceScore: number;
+  evidenceBreakdown: {
+    imageObservationQuality: string;
+    internalResearcherDataMatch: string;
+    webResearchSupport: string;
+    aiInferenceCertainty: string;
+  };
+}
+
+export interface MissingInformationGuide {
+  criticalMissingFields: string[];
+  recommendedTests: {
+    testName: string;
+    description: string;
+    importance: "High" | "Medium" | "Recommended";
+  }[];
+}
+
+export interface CropAdvisorAnalysis {
+  id: string;
+  user_id: string;
+  image_name?: string;
+  location_name?: string;
+  latitude?: number;
+  longitude?: number;
+  image_observations: ImageObservations;
+  internal_research: InternalResearchRef[];
+  web_research: ExternalWebSource[];
+  environmental_data: EnvironmentalSnapshot;
+  recommendations: PlantRecommendation[];
+  less_suitable: LessSuitablePlant[];
+  confidence_score: ConfidenceAssessment;
+  missing_information: MissingInformationGuide;
+  created_at: string;
+}
+
 // Fallback In-Memory Seed Store
+const mockCropAdvisorAnalyses: CropAdvisorAnalysis[] = [];
+
 const mockFarms: Farm[] = [
   { id: "f-1", user_id: "demo-user-1", name: "Green Valley Estate", location: "Central Valley, Sector 4", soil_type: "Loam", total_area: 14.5, created_at: "2026-01-15T08:00:00Z", field_count: 3 },
   { id: "f-2", user_id: "demo-user-1", name: "Sunburst Plantation", location: "Eastern Ridge, Zone B", soil_type: "Clay Loam", total_area: 28.0, created_at: "2026-02-10T10:30:00Z", field_count: 2 },
@@ -448,3 +564,127 @@ export function addAuditLog(userId: string | null, action: string, target_table:
   };
   mockAuditLogs.unshift(log);
 }
+
+export async function getCropAdvisorAnalyses(userId: string): Promise<CropAdvisorAnalysis[]> {
+  let dbAnalyses: CropAdvisorAnalysis[] = [];
+  const db = getDb();
+
+  if (db) {
+    try {
+      const [rows] = await db.query(
+        `SELECT id, user_id, image_name, location_name, latitude, longitude,
+                image_observations, internal_research, web_research, environmental_data,
+                recommendations, less_suitable, confidence_score, missing_information, created_at
+         FROM crop_advisor_analyses
+         WHERE user_id = ?
+         ORDER BY created_at DESC`,
+        [userId]
+      );
+      if (Array.isArray(rows)) {
+        dbAnalyses = (rows as Array<Record<string, unknown>>).map((r) => ({
+          id: String(r.id),
+          user_id: String(r.user_id),
+          image_name: (r.image_name as string) || undefined,
+          location_name: (r.location_name as string) || undefined,
+          latitude: typeof r.latitude === "number" ? r.latitude : undefined,
+          longitude: typeof r.longitude === "number" ? r.longitude : undefined,
+          image_observations: typeof r.image_observations === "string" ? JSON.parse(r.image_observations) : r.image_observations,
+          internal_research: typeof r.internal_research === "string" ? JSON.parse(r.internal_research) : r.internal_research,
+          web_research: typeof r.web_research === "string" ? JSON.parse(r.web_research) : r.web_research,
+          environmental_data: typeof r.environmental_data === "string" ? JSON.parse(r.environmental_data) : r.environmental_data,
+          recommendations: typeof r.recommendations === "string" ? JSON.parse(r.recommendations) : r.recommendations,
+          less_suitable: typeof r.less_suitable === "string" ? JSON.parse(r.less_suitable) : r.less_suitable,
+          confidence_score: typeof r.confidence_score === "string" ? JSON.parse(r.confidence_score) : r.confidence_score,
+          missing_information: typeof r.missing_information === "string" ? JSON.parse(r.missing_information) : r.missing_information,
+          created_at: String(r.created_at),
+        })) as CropAdvisorAnalysis[];
+      }
+    } catch {
+      // Ignore DB query errors and rely on memory store
+    }
+  }
+
+  const memoryAnalyses = mockCropAdvisorAnalyses.filter((a) => a.user_id === userId);
+  
+  // Combine DB and memory store items, avoiding duplicates
+  const allAnalysesMap = new Map<string, CropAdvisorAnalysis>();
+  for (const item of memoryAnalyses) {
+    allAnalysesMap.set(item.id, item);
+  }
+  for (const item of dbAnalyses) {
+    allAnalysesMap.set(item.id, item);
+  }
+
+  return Array.from(allAnalysesMap.values()).sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
+}
+
+export async function saveCropAdvisorAnalysis(
+  userId: string,
+  analysisData: Omit<CropAdvisorAnalysis, "id" | "user_id" | "created_at">
+): Promise<CropAdvisorAnalysis> {
+  const id = `caa-${randomUUID().slice(0, 8)}`;
+  const now = new Date().toISOString();
+  const analysis: CropAdvisorAnalysis = {
+    ...analysisData,
+    id,
+    user_id: userId,
+    created_at: now,
+  };
+
+  const db = getDb();
+  if (db) {
+    try {
+      await db.query(
+        `INSERT INTO crop_advisor_analyses (
+          id, user_id, image_name, location_name, latitude, longitude,
+          image_observations, internal_research, web_research, environmental_data,
+          recommendations, less_suitable, confidence_score, missing_information, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          id,
+          userId,
+          analysisData.image_name || null,
+          analysisData.location_name || null,
+          analysisData.latitude || null,
+          analysisData.longitude || null,
+          JSON.stringify(analysisData.image_observations),
+          JSON.stringify(analysisData.internal_research),
+          JSON.stringify(analysisData.web_research),
+          JSON.stringify(analysisData.environmental_data),
+          JSON.stringify(analysisData.recommendations),
+          JSON.stringify(analysisData.less_suitable),
+          JSON.stringify(analysisData.confidence_score),
+          JSON.stringify(analysisData.missing_information),
+          now,
+        ]
+      );
+    } catch (err) {
+      console.warn("MySQL insert fallback for Crop Advisor Analysis:", err);
+    }
+  }
+
+  mockCropAdvisorAnalyses.unshift(analysis);
+  addAuditLog(userId, "Performed Crop Advisor Soil Analysis", "crop_advisor_analyses", `Analyzed land image for location: '${analysisData.location_name || "Unknown Location"}' (ID: ${id})`);
+  return analysis;
+}
+
+export async function deleteCropAdvisorAnalysis(userId: string, analysisId: string): Promise<boolean> {
+  const db = getDb();
+  if (db) {
+    try {
+      await db.query(`DELETE FROM crop_advisor_analyses WHERE id = ? AND user_id = ?`, [analysisId, userId]);
+    } catch {
+      // Fallback
+    }
+  }
+
+  const idx = mockCropAdvisorAnalyses.findIndex((a) => a.id === analysisId && a.user_id === userId);
+  if (idx !== -1) {
+    mockCropAdvisorAnalyses.splice(idx, 1);
+  }
+  return true;
+}
+
+

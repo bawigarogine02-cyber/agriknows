@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 const COOKIE_NAME = "agriknow_session";
 const SESSION_SECRET = process.env.SESSION_SECRET;
 
-export type SessionUser = { id: string; email: string; name: string; role: "farmer" | "researcher" | "admin" | "user"; status: "active" | "suspended" };
+export type SessionUser = { id: string; email: string; name: string; role: "farmer" | "researcher" | "admin"; status: "active" | "suspended" };
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 30;
 
 function sign(value: string) {
@@ -28,8 +28,10 @@ export function verifySessionValue(value: string | undefined): SessionUser | nul
   try {
     const parsed = JSON.parse(Buffer.from(payload, "base64url").toString()) as SessionUser & { exp?: number };
     if (!parsed.id || !parsed.email || !parsed.name || !parsed.exp || parsed.exp < Math.floor(Date.now() / 1000)) return null;
-    const validRole = ["farmer", "researcher", "admin", "user"].includes(parsed.role) ? parsed.role : "farmer";
-    return { id: parsed.id, email: parsed.email, name: parsed.name, role: validRole as SessionUser["role"], status: parsed.status === "suspended" ? "suspended" : "active" };
+    const validRole: "farmer" | "researcher" | "admin" = ["farmer", "researcher", "admin"].includes(parsed.role)
+      ? (parsed.role as "farmer" | "researcher" | "admin")
+      : "farmer";
+    return { id: parsed.id, email: parsed.email, name: parsed.name, role: validRole, status: parsed.status === "suspended" ? "suspended" : "active" };
   } catch {
     return null;
   }
