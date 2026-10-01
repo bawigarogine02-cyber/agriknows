@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { hashPassword } from "@/lib/auth/password";
-import { createSessionValue, sessionCookie } from "@/lib/auth/session";
-import { getDb } from "@/lib/db/pool";
+import { createSessionValue, sessionCookie, SessionUser } from "@/lib/auth/session";
+import { createUserRecord, findUserByEmail } from "@/lib/db/repository";
 
 export async function POST(request: Request) {
   let body: { name?: string; email?: string; password?: string; confirmPassword?: string; role?: string; address?: string };
@@ -11,31 +11,54 @@ export async function POST(request: Request) {
   } catch {
     return NextResponse.json({ error: "Send a valid JSON request." }, { status: 400 });
   }
-  if (!body.name?.trim() || !body.email?.trim() || !body.password || body.password.length < 6 || body.password !== body.confirmPassword) {
+
+  const name = body.name?.trim();
+  const email = body.email?.trim().toLowerCase();
+  const password = body.password;
+  const confirmPassword = body.confirmPassword;
+  const address = body.address?.trim() || "";
+
+  if (!name || !email || !password || password.length < 6 || password !== confirmPassword) {
     return NextResponse.json({ error: "Provide a name, valid email, matching passwords, and at least six characters." }, { status: 400 });
   }
-  const db = getDb();
-  if (!db) return NextResponse.json({ error: "Registration is not configured. Add DATABASE_URL and run the database migration." }, { status: 503 });
-  
-  const assignedRole: "farmer" | "researcher" = body.role?.toLowerCase() === "researcher" ? "researcher" : "farmer";
-  const user = {
-    id: randomUUID(),
-    name: body.name.trim(),
-    email: body.email.trim().toLowerCase(),
-    role: assignedRole,
-    status: "active" as const,
-    address: body.address?.trim() || "",
-    needsOnboarding: false,
-  };
-  try {
-    await db.execute(
-      "INSERT INTO users (id, name, email, role, status, password_hash, address) VALUES (?, ?, ?, ?, ?, ?, ?)",
-      [user.id, user.name, user.email, user.role, user.status, await hashPassword(body.password), user.address || null]
-    );
-  } catch {
-    return NextResponse.json({ error: "That email is already registered or could not be saved." }, { status: 409 });
+
+  const existingUser = await findUserByEmail(email);
+  if (existingUser) {
+    return NextResponse.json({ error: "That email address is already registered." }, { status: 409 });
   }
-  const response = NextResponse.json({ user }, { status: 201 });
-  response.cookies.set(sessionCookie.name, createSessionValue(user), sessionCookie.options);
-  return response;
+
+  const roleInput = body.role?.toLowerCase();
+  const assignedRole: "farmer" | "researcher" = roleInput === "researcher" ? "researcher" : "farmer";
+
+  const userId = randomUUID();
+  const password_hash = await hashPassword(password);
+
+  try {
+    await createUserRecord({
+      id: userId,
+      name,
+      email,
+      role: assignedRole,
+      status: "active",
+      password_hash,
+      address,
+    });
+
+    const sessionUser: SessionUser = {
+      id: userId,
+      name,
+      email,
+      role: assignedRole,
+      status: "active",
+      address,
+      needsOnboarding: false,
+    };
+
+    const response = NextResponse.json({ user: sessionUser }, { status: 201 });
+    response.cookies.set(sessionCookie.name, createSessionValue(sessionUser), sessionCookie.options);
+    return response;
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Failed to complete account registration.";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }

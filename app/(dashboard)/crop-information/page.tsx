@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Check,
   ExternalLink,
@@ -129,6 +129,8 @@ export default function CropInformationPage() {
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedCropModal, setSelectedCropModal] = useState<CropItem | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState("");
 
   // New crop form state
   const [newCrop, setNewCrop] = useState({
@@ -145,6 +147,37 @@ export default function CropInformationPage() {
 
   const categories = ["All", "Legumes", "Solanaceous", "Cereals", "Cover Crops"];
 
+  // Fetch crops from API on mount
+  useEffect(() => {
+    fetch("/api/crops")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.crops && Array.isArray(data.crops) && data.crops.length > 0) {
+          const apiCrops: CropItem[] = data.crops.map((c: { id: string; name: string; season?: string; climate?: string; water_requirement?: string }) => ({
+            id: String(c.id),
+            name: c.name,
+            type: c.season || "Agricultural Variety",
+            category: "Legumes" as const,
+            stage: "Growing",
+            daysGrowing: 45,
+            health: "Healthy" as const,
+            detail: `Climate: ${c.climate || "Tropical"}. Water: ${c.water_requirement || "400-600mm"}. Cultivated variety managed in workspace field records.`,
+            soil: "Well-drained loamy soil",
+            temp: "18°C – 30°C",
+            sun: "Full sun",
+          }));
+
+          setCrops((existing) => {
+            const existingIds = new Set(existing.map((item) => item.id));
+            const existingNames = new Set(existing.map((item) => item.name.toLowerCase()));
+            const newUnique = apiCrops.filter((item) => !existingIds.has(item.id) && !existingNames.has(item.name.toLowerCase()));
+            return [...newUnique, ...existing];
+          });
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   const filteredCrops = crops.filter((crop) => {
     const matchesSearch =
       crop.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -154,35 +187,71 @@ export default function CropInformationPage() {
     return matchesSearch && matchesCategory;
   });
 
-  const handleAddCrop = (e: React.FormEvent) => {
+  const handleAddCrop = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCrop.name.trim()) return;
-    const item: CropItem = {
-      id: String(Date.now()),
+
+    setIsSubmitting(true);
+    setError("");
+
+    const itemPayload = {
       name: newCrop.name.trim(),
-      type: newCrop.type.trim() || "Agricultural Variety",
+      season: newCrop.type.trim() || "Wet Season",
       category: newCrop.category,
       stage: newCrop.stage,
-      daysGrowing: Number(newCrop.daysGrowing) || 1,
-      health: "Healthy",
+      days_growing: Number(newCrop.daysGrowing) || 1,
       detail: newCrop.detail.trim() || "Cultivated variety managed in workspace field records.",
       soil: newCrop.soil,
       temp: newCrop.temp,
       sun: newCrop.sun,
     };
-    setCrops([item, ...crops]);
-    setNewCrop({
-      name: "",
-      type: "",
-      category: "Legumes",
-      stage: "Planting / Seedling",
-      daysGrowing: 1,
-      detail: "",
-      soil: "Well-drained loamy soil",
-      temp: "20°C – 30°C",
-      sun: "Full sun",
-    });
-    setShowAddModal(false);
+
+    try {
+      const response = await fetch("/api/crops", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(itemPayload),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        setError(data.error || "Failed to create crop entry.");
+        setIsSubmitting(false);
+        return;
+      }
+
+      const createdCrop: CropItem = {
+        id: String(data.crop?.id || Date.now()),
+        name: newCrop.name.trim(),
+        type: newCrop.type.trim() || "Agricultural Variety",
+        category: newCrop.category,
+        stage: newCrop.stage,
+        daysGrowing: Number(newCrop.daysGrowing) || 1,
+        health: "Healthy",
+        detail: newCrop.detail.trim() || "Cultivated variety managed in workspace field records.",
+        soil: newCrop.soil,
+        temp: newCrop.temp,
+        sun: newCrop.sun,
+      };
+
+      setCrops((prev) => [createdCrop, ...prev]);
+      setNewCrop({
+        name: "",
+        type: "",
+        category: "Legumes",
+        stage: "Planting / Seedling",
+        daysGrowing: 1,
+        detail: "",
+        soil: "Well-drained loamy soil",
+        temp: "20°C – 30°C",
+        sun: "Full sun",
+      });
+      setShowAddModal(false);
+    } catch {
+      setError("Network error creating crop.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const deleteCrop = (id: string) => {

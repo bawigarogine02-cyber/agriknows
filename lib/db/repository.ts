@@ -38,6 +38,10 @@ export interface Crop {
   climate: string;
   companion_crops: string;
   season: string;
+  type?: string;
+  category?: string;
+  stage?: string;
+  detail?: string;
 }
 
 export interface PestDisease {
@@ -421,18 +425,249 @@ export async function toggleFieldHarvest(userId: string, fieldId: string): Promi
   return field;
 }
 
+export interface UserRecord {
+  id: string;
+  name: string;
+  email: string;
+  role: "farmer" | "researcher" | "admin";
+  status: "active" | "suspended";
+  password_hash: string;
+  address?: string;
+  created_at: string;
+}
+
+const mockUsers: UserRecord[] = [
+  {
+    id: "u-farmer-1",
+    name: "Frank Farmer",
+    email: "farmer@agrikms.org",
+    role: "farmer",
+    status: "active",
+    password_hash: "d4128525b6a7a13c328e1d51a6fb2b23:8d50694bf4f73aa8b8577ae74d1a084fffa3fbe59942a7eb6d9cfbd9dd43ceba0c9b0e1a129d4791a89c927f8a7e0d37e4be63cf6bc9dcf8bc1e61bbddff42eb",
+    address: "Green Valley Farm, Sector 4",
+    created_at: "2026-01-10T08:00:00Z",
+  },
+  {
+    id: "u-res-1",
+    name: "Dr. Elena Rostova",
+    email: "researcher@agrikms.org",
+    role: "researcher",
+    status: "active",
+    password_hash: "d4128525b6a7a13c328e1d51a6fb2b23:8d50694bf4f73aa8b8577ae74d1a084fffa3fbe59942a7eb6d9cfbd9dd43ceba0c9b0e1a129d4791a89c927f8a7e0d37e4be63cf6bc9dcf8bc1e61bbddff42eb",
+    address: "Agricultural Research Station, Zone B",
+    created_at: "2026-01-12T09:30:00Z",
+  },
+  {
+    id: "u-admin-1",
+    name: "System Administrator",
+    email: "admin@agrikms.org",
+    role: "admin",
+    status: "active",
+    password_hash: "d4128525b6a7a13c328e1d51a6fb2b23:8d50694bf4f73aa8b8577ae74d1a084fffa3fbe59942a7eb6d9cfbd9dd43ceba0c9b0e1a129d4791a89c927f8a7e0d37e4be63cf6bc9dcf8bc1e61bbddff42eb",
+    address: "AgriKnow HQ",
+    created_at: "2026-01-01T00:00:00Z",
+  },
+];
+
 export async function getCrops(): Promise<Crop[]> {
   const db = getDb();
   if (db) {
     try {
-      const [rows] = await db.query("SELECT id, name, season, ideal_ph_min, ideal_ph_max, water_requirement, growth_days, climate, companion_crops FROM crops");
-      if (Array.isArray(rows) && rows.length > 0) return rows as Crop[];
+      const [rows] = await db.query(
+        "SELECT id, name, season, ideal_ph_min, ideal_ph_max, water_requirement, growth_days, climate, companion_crops FROM crops ORDER BY created_at DESC"
+      );
+      if (Array.isArray(rows) && rows.length > 0) {
+        return (rows as Array<Record<string, unknown>>).map((r) => ({
+          ...r,
+          id: String(r.id),
+          ideal_ph_min: Number(r.ideal_ph_min || 6.0),
+          ideal_ph_max: Number(r.ideal_ph_max || 7.5),
+          growth_days: Number(r.growth_days || 90),
+        })) as Crop[];
+      }
     } catch {
       // fallback
     }
   }
   return mockCrops;
 }
+
+export async function createCrop(crop: Partial<Crop> & { name: string }): Promise<Crop> {
+  const db = getDb();
+  const id = `c-${randomUUID().slice(0, 8)}`;
+  const newCrop: Crop = {
+    id,
+    name: crop.name,
+    season: crop.season || "Wet Season",
+    ideal_ph_min: Number(crop.ideal_ph_min || 6.0),
+    ideal_ph_max: Number(crop.ideal_ph_max || 7.5),
+    water_requirement: crop.water_requirement || "400 - 600 mm",
+    growth_days: Number(crop.growth_days || 90),
+    climate: crop.climate || "Warm Subtropical",
+    companion_crops: crop.companion_crops || "Legumes, Basil",
+  };
+
+  if (db) {
+    try {
+      const [res] = await db.query(
+        `INSERT INTO crops (name, season, ideal_ph_min, ideal_ph_max, water_requirement, growth_days, climate, companion_crops) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [newCrop.name, newCrop.season, newCrop.ideal_ph_min, newCrop.ideal_ph_max, newCrop.water_requirement, newCrop.growth_days, newCrop.climate, newCrop.companion_crops]
+      );
+      if (res && "insertId" in res) {
+        newCrop.id = String((res as { insertId: number }).insertId);
+      }
+    } catch (err) {
+      console.warn("MySQL crop insert fallback:", err);
+    }
+  }
+
+  mockCrops.unshift(newCrop);
+  return newCrop;
+}
+
+export async function getUsersFromDbOrMemory(search = "", page = 1, pageSize = 10): Promise<{ users: Array<{ id: string; name: string; email: string; role: string; status: string; createdAt: string }>; total: number }> {
+  const db = getDb();
+  if (db) {
+    try {
+      const like = `%${search}%`;
+      const [countRows] = await db.query("SELECT COUNT(*) AS total FROM users WHERE name LIKE ? OR email LIKE ?", [like, like]);
+      const [dbUsers] = await db.query(
+        "SELECT id, name, email, role, status, created_at AS createdAt FROM users WHERE name LIKE ? OR email LIKE ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+        [like, like, pageSize, (page - 1) * pageSize]
+      );
+      if (Array.isArray(dbUsers) && dbUsers.length > 0) {
+        const mapped = (dbUsers as Array<Record<string, unknown>>).map((u) => ({
+          id: String(u.id),
+          name: String(u.name),
+          email: String(u.email),
+          role: ["farmer", "researcher", "admin"].includes(String(u.role)) ? String(u.role) : "farmer",
+          status: String(u.status) === "suspended" ? "suspended" : "active",
+          createdAt: String(u.createdAt || new Date().toISOString()),
+        }));
+        return { users: mapped, total: Number((countRows as Array<{ total: number }>)[0]?.total ?? mapped.length) };
+      }
+    } catch (err) {
+      console.warn("MySQL users fetch fallback:", err);
+    }
+  }
+
+  const query = search.toLowerCase().trim();
+  const filtered = mockUsers.filter((u) => u.name.toLowerCase().includes(query) || u.email.toLowerCase().includes(query));
+  const start = (page - 1) * pageSize;
+  const paginated = filtered.slice(start, start + pageSize).map((u) => ({
+    id: u.id,
+    name: u.name,
+    email: u.email,
+    role: u.role,
+    status: u.status,
+    createdAt: u.created_at,
+  }));
+  return { users: paginated, total: filtered.length };
+}
+
+export async function findUserByEmail(email: string): Promise<UserRecord | null> {
+  const db = getDb();
+  const cleanEmail = email.trim().toLowerCase();
+  if (db) {
+    try {
+      const [rows] = await db.query(
+        "SELECT id, name, email, role, status, password_hash, address, created_at FROM users WHERE email = ? LIMIT 1",
+        [cleanEmail]
+      );
+      if (Array.isArray(rows) && rows.length > 0) {
+        const r = rows[0] as Record<string, unknown>;
+        const validRole = ["farmer", "researcher", "admin"].includes(String(r.role))
+          ? (String(r.role) as "farmer" | "researcher" | "admin")
+          : "farmer";
+        return {
+          id: String(r.id),
+          name: String(r.name),
+          email: String(r.email),
+          role: validRole,
+          status: String(r.status) === "suspended" ? "suspended" : "active",
+          password_hash: String(r.password_hash || ""),
+          address: r.address ? String(r.address) : "",
+          created_at: String(r.created_at || new Date().toISOString()),
+        };
+      }
+    } catch {
+      // fallback to mock
+    }
+  }
+  return mockUsers.find((u) => u.email.toLowerCase() === cleanEmail) || null;
+}
+
+export async function createUserRecord(user: Omit<UserRecord, "created_at">): Promise<UserRecord> {
+  const newRecord: UserRecord = {
+    ...user,
+    created_at: new Date().toISOString(),
+  };
+
+  const db = getDb();
+  if (db) {
+    try {
+      await db.execute(
+        "INSERT INTO users (id, name, email, role, status, password_hash, address) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [user.id, user.name, user.email, user.role, user.status, user.password_hash, user.address || null]
+      );
+    } catch (err) {
+      console.warn("MySQL user insert fallback:", err);
+    }
+  }
+
+  const existingIdx = mockUsers.findIndex((u) => u.email === user.email);
+  if (existingIdx !== -1) {
+    mockUsers[existingIdx] = newRecord;
+  } else {
+    mockUsers.unshift(newRecord);
+  }
+  return newRecord;
+}
+
+export async function updateUserRoleOrStatus(id: string, role?: string, status?: string): Promise<boolean> {
+  const db = getDb();
+  if (db) {
+    try {
+      await db.execute("UPDATE users SET role = COALESCE(?, role), status = COALESCE(?, status) WHERE id = ?", [
+        role ?? null,
+        status ?? null,
+        id,
+      ]);
+    } catch (err) {
+      console.warn("MySQL user update fallback:", err);
+    }
+  }
+
+  const user = mockUsers.find((u) => u.id === id);
+  if (user) {
+    if (role && ["farmer", "researcher", "admin"].includes(role)) {
+      user.role = role as "farmer" | "researcher" | "admin";
+    }
+    if (status && ["active", "suspended"].includes(status)) {
+      user.status = status as "active" | "suspended";
+    }
+  }
+  return true;
+}
+
+export async function deleteUserRecord(id: string): Promise<boolean> {
+  const db = getDb();
+  if (db) {
+    try {
+      await db.execute("DELETE FROM users WHERE id = ?", [id]);
+    } catch (err) {
+      console.warn("MySQL user delete fallback:", err);
+    }
+  }
+
+  const idx = mockUsers.findIndex((u) => u.id === id);
+  if (idx !== -1) {
+    mockUsers.splice(idx, 1);
+  }
+  return true;
+}
+
 
 export async function getPestsDiseases(): Promise<PestDisease[]> {
   return mockPests;
