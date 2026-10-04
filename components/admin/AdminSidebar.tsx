@@ -48,7 +48,6 @@ export default function AdminSidebar({ isOpen, onClose, onLogout }: AdminSidebar
             <Link
               key={href}
               href={href}
-              onClick={onClose}
               className={`flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-semibold transition ${active ? "bg-[#199668] text-white" : "text-emerald-50/80 hover:bg-white/10 hover:text-white"}`}
             >
               <Icon size={18} />

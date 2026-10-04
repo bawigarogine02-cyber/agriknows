@@ -435,7 +435,7 @@ export default function DashboardHome() {
             </h2>
             <button
               type="button"
-              onClick={() => router.push("/crop-information")}
+              onClick={() => router.push("/crops")}
               className="flex items-center gap-1 text-xs font-bold text-slate-500 hover:text-[#17765b]"
             >
               View All <ArrowRight size={13} />
@@ -498,7 +498,7 @@ export default function DashboardHome() {
 
             <button
               type="button"
-              onClick={() => router.push("/crop-information")}
+              onClick={() => router.push("/crops")}
               className="flex min-h-[72px] flex-col items-center justify-center gap-2 rounded-xl border border-slate-200 p-2 text-center transition hover:border-[#9dd9bf] hover:bg-[#f5fbf7]"
             >
               <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#fff5dd] text-[#bd8a20]">
@@ -581,7 +581,7 @@ export default function DashboardHome() {
                 type="button"
                 onClick={() => {
                   setActiveModal(null);
-                  router.push("/crop-information");
+                  router.push("/crops");
                 }}
                 className="rounded-xl bg-[#16875f] px-5 py-2 text-xs font-bold text-white hover:bg-[#0c704d]"
               >

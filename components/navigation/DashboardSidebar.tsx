@@ -34,9 +34,10 @@ type NavigationItem = {
 // Strict Role-Based Sidebar Navigation Configuration
 const farmerNavItems: NavigationItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: House },
-  { label: "Crop Advisor", href: "/crop-advisor", icon: Sprout },
+  { label: "Crops", href: "/crops", icon: Sprout },
+  { label: "Crop Advisor", href: "/crop-advisor", icon: Compass },
   { label: "Farms & Fields", href: "/farms", icon: Leaf },
-  { label: "Decision Support", href: "/decision-support", icon: Compass },
+  { label: "Decision Support", href: "/decision-support", icon: ShieldCheck },
   { label: "Knowledge Base", href: "/knowledge-base", icon: BookOpen },
   { label: "Consultations", href: "/consultations", icon: MessageSquare },
   { label: "Profile", href: "/profile", icon: FileText },
@@ -119,7 +120,6 @@ export default function DashboardSidebar({ isOpen, onClose, userRole }: Dashboar
               key={label}
               href={href}
               title={isOpen ? undefined : label}
-              onClick={onClose}
               className={`flex min-h-[48px] w-full items-center rounded-[9px] py-2.5 text-base font-medium leading-5 transition-colors ${
                 isOpen ? "gap-3 px-3.5 text-left" : "justify-center px-2"
               } ${

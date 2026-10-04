@@ -1,6 +1,6 @@
 "use client";
 
-import { Search, ShieldAlert, Trash2, UserCheck } from "lucide-react";
+import { Plus, Search, ShieldAlert, Trash2, UserCheck, UserPlus, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 type AdminUser = {
@@ -21,6 +21,20 @@ export default function AdminUsersTable() {
   const [error, setError] = useState("");
   const [userToDelete, setUserToDelete] = useState<AdminUser | null>(null);
   const pageSize = 10;
+
+  // Add User modal states
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formError, setFormError] = useState("");
+  const [formSuccess, setFormSuccess] = useState("");
+  const [newUser, setNewUser] = useState({
+    name: "",
+    email: "",
+    password: "",
+    role: "farmer" as "farmer" | "researcher" | "admin",
+    status: "active" as "active" | "suspended",
+    address: "",
+  });
 
   async function loadUsers() {
     try {
@@ -57,6 +71,60 @@ export default function AdminUsersTable() {
       cancelled = true;
     };
   }, [page, search]);
+
+  async function handleAddUserSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newUser.name.trim() || !newUser.email.trim() || !newUser.password) {
+      setFormError("Please fill out all required fields.");
+      return;
+    }
+
+    if (newUser.password.length < 6) {
+      setFormError("Password must be at least 6 characters long.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setFormError("");
+    setFormSuccess("");
+
+    try {
+      const response = await fetch("/api/admin/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newUser),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setFormError(data.error || "Failed to create user account.");
+        setIsSubmitting(false);
+        return;
+      }
+
+      setFormSuccess(`Successfully created user account for ${newUser.name}!`);
+      setNewUser({
+        name: "",
+        email: "",
+        password: "",
+        role: "farmer",
+        status: "active",
+        address: "",
+      });
+
+      await loadUsers();
+
+      setTimeout(() => {
+        setShowAddModal(false);
+        setFormSuccess("");
+      }, 1200);
+    } catch {
+      setFormError("Network error while creating user account.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
 
   async function updateUser(id: string, changes: Partial<AdminUser>) {
     try {
@@ -129,6 +197,18 @@ export default function AdminUsersTable() {
                 className="w-full text-xs text-slate-800 outline-none"
               />
             </label>
+
+            <button
+              type="button"
+              onClick={() => {
+                setFormError("");
+                setFormSuccess("");
+                setShowAddModal(true);
+              }}
+              className="flex h-11 items-center gap-2 rounded-lg bg-[#16875f] px-4 text-xs font-bold text-white shadow-sm hover:bg-[#0c704d] transition"
+            >
+              <UserPlus size={16} /> Add User
+            </button>
           </div>
         </div>
 
@@ -232,6 +312,139 @@ export default function AdminUsersTable() {
           </div>
         </div>
       </section>
+
+      {/* Add User Modal */}
+      {showAddModal && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="add-user-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setShowAddModal(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-lg rounded-2xl bg-white p-6 sm:p-7 shadow-2xl space-y-5"
+          >
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h2 id="add-user-title" className="text-xl font-bold text-[#123d35] flex items-center gap-2">
+                <UserPlus className="text-[#16875f]" size={22} /> Register New User Account
+              </h2>
+              <button
+                type="button"
+                onClick={() => setShowAddModal(false)}
+                className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {formError && (
+              <div className="rounded-xl bg-rose-50 p-3 text-xs font-semibold text-rose-700 border border-rose-200">
+                ⚠️ {formError}
+              </div>
+            )}
+
+            {formSuccess && (
+              <div className="rounded-xl bg-emerald-50 p-3 text-xs font-semibold text-emerald-800 border border-emerald-200">
+                ✅ {formSuccess}
+              </div>
+            )}
+
+            <form onSubmit={handleAddUserSubmit} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700">Full Name *</label>
+                <input
+                  required
+                  value={newUser.name}
+                  onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
+                  placeholder="e.g. Maria Santos"
+                  className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-xs outline-none focus:border-[#16875f]"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700">Email Address *</label>
+                <input
+                  required
+                  type="email"
+                  value={newUser.email}
+                  onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+                  placeholder="e.g. maria.santos@agrikms.org"
+                  className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-xs outline-none focus:border-[#16875f]"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700">Password * (min. 6 characters)</label>
+                <input
+                  required
+                  type="password"
+                  minLength={6}
+                  value={newUser.password}
+                  onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+                  placeholder="••••••••"
+                  className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-xs outline-none focus:border-[#16875f]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700">User Role *</label>
+                  <select
+                    value={newUser.role}
+                    onChange={(e) => setNewUser({ ...newUser, role: e.target.value as AdminUser["role"] })}
+                    className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-xs outline-none focus:border-[#16875f]"
+                  >
+                    <option value="farmer">Farmer</option>
+                    <option value="researcher">Researcher</option>
+                    <option value="admin">Administrator</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700">Initial Account Status</label>
+                  <select
+                    value={newUser.status}
+                    onChange={(e) => setNewUser({ ...newUser, status: e.target.value as AdminUser["status"] })}
+                    className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-xs outline-none focus:border-[#16875f]"
+                  >
+                    <option value="active">Active</option>
+                    <option value="suspended">Suspended</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700">Address / Location (Optional)</label>
+                <input
+                  value={newUser.address}
+                  onChange={(e) => setNewUser({ ...newUser, address: e.target.value })}
+                  placeholder="e.g. Sector 4, Green Valley, Talisay City"
+                  className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-xs outline-none focus:border-[#16875f]"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="rounded-xl bg-slate-100 px-5 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="rounded-xl bg-[#16875f] px-6 py-2.5 text-xs font-bold text-white hover:bg-[#0c704d] disabled:opacity-50"
+                >
+                  {isSubmitting ? "Creating Account..." : "Create User"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {userToDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-5">
