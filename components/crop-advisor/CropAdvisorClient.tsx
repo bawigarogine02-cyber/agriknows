@@ -6,7 +6,6 @@ import {
   UploadCloud,
   CheckCircle2,
   AlertTriangle,
-  FileText,
   Globe,
   BookOpen,
   FlaskConical,
@@ -20,12 +19,9 @@ import {
   Sparkles,
   ArrowRight,
   Info,
-  Droplets,
-  Thermometer,
   Layers,
   Printer,
   ShieldCheck,
-  Compass,
   Trash2,
 } from "lucide-react";
 import { getAccurateUserLocation } from "@/lib/utils/geolocation";
@@ -33,20 +29,17 @@ import type { CropAdvisorAnalysis } from "@/lib/db/repository";
 
 interface CropAdvisorClientProps {
   initialAnalyses: CropAdvisorAnalysis[];
-  userName: string;
 }
-
-const LOCAL_STORAGE_KEY = "agrikms_crop_advisor_history";
 
 const ANALYSIS_STEPS = [
   { id: 1, label: "Analyzing uploaded land image...", subtext: "Extracting soil color, texture, moisture & terrain features", icon: Sparkles },
-  { id: 2, label: "Searching researcher database...", subtext: "Querying peer-reviewed publications and expert studies", icon: BookOpen },
+  { id: 2, label: "Searching agricultural research...", subtext: "Querying peer-reviewed publications and expert studies", icon: BookOpen },
   { id: 3, label: "Gathering agricultural research...", subtext: "Cross-referencing global soil & crop databases (USDA, FAO)", icon: Globe },
   { id: 4, label: "Comparing plant requirements...", subtext: "Calculating estimated suitability and compatibility scores", icon: Layers },
   { id: 5, label: "Generating recommendations...", subtext: "Structuring agronomic insights and soil improvement steps", icon: CheckCircle2 },
 ];
 
-export default function CropAdvisorClient({ initialAnalyses, userName }: CropAdvisorClientProps) {
+export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClientProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -67,43 +60,12 @@ export default function CropAdvisorClient({ initialAnalyses, userName }: CropAdv
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Load and sync localStorage with server analyses
   useEffect(() => {
     getAccurateUserLocation().then((res) => {
       setLocationName(res.locationName);
       setCoords({ lat: res.latitude, lng: res.longitude });
-    });
-
-    try {
-      const localData = localStorage.getItem(LOCAL_STORAGE_KEY);
-      if (localData) {
-        const parsed: CropAdvisorAnalysis[] = JSON.parse(localData);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const map = new Map<string, CropAdvisorAnalysis>();
-          for (const item of parsed) map.set(item.id, item);
-          for (const item of initialAnalyses) map.set(item.id, item);
-
-          const combined = Array.from(map.values()).sort(
-            (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-          );
-          setAnalysesHistory(combined);
-          if (!currentAnalysis && combined.length > 0) {
-            setCurrentAnalysis(combined[0]);
-          }
-        }
-      }
-    } catch {
-      // Ignore localStorage read errors
-    }
-  }, [initialAnalyses]);
-
-  const saveToLocalStorage = (items: CropAdvisorAnalysis[]) => {
-    try {
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(items));
-    } catch {
-      // Ignore write errors
-    }
-  };
+    }).catch(() => setLocationName("Location unavailable"));
+  }, []);
 
   const handleFileSelect = (file: File) => {
     setErrorMsg(null);
@@ -176,7 +138,6 @@ export default function CropAdvisorClient({ initialAnalyses, userName }: CropAdv
       
       const updatedHistory = [result, ...analysesHistory.filter((a) => a.id !== result.id)];
       setAnalysesHistory(updatedHistory);
-      saveToLocalStorage(updatedHistory);
 
       setSavedToast("Analysis automatically saved to history database.");
       setTimeout(() => setSavedToast(null), 5000);
@@ -191,17 +152,17 @@ export default function CropAdvisorClient({ initialAnalyses, userName }: CropAdv
   const deleteHistoryItem = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     try {
-      await fetch(`/api/crop-advisor?id=${id}`, { method: "DELETE" });
-    } catch {
-      // Continue with local update
-    }
+      const response = await fetch(`/api/crop-advisor?id=${id}`, { method: "DELETE" });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Unable to delete the analysis.");
 
-    const updated = analysesHistory.filter((a) => a.id !== id);
-    setAnalysesHistory(updated);
-    saveToLocalStorage(updated);
-
-    if (currentAnalysis?.id === id) {
-      setCurrentAnalysis(updated.length > 0 ? updated[0] : null);
+      const updated = analysesHistory.filter((analysis) => analysis.id !== id);
+      setAnalysesHistory(updated);
+      if (currentAnalysis?.id === id) {
+        setCurrentAnalysis(updated.length > 0 ? updated[0] : null);
+      }
+    } catch (error) {
+      setErrorMsg(error instanceof Error ? error.message : "Unable to delete the analysis.");
     }
   };
 
@@ -241,7 +202,7 @@ export default function CropAdvisorClient({ initialAnalyses, userName }: CropAdv
             </span>
           </div>
           <p className="max-w-2xl text-base text-emerald-100/90 leading-relaxed">
-            Upload an image of your land or soil to receive an AI-powered suitability analysis combining Vision AI, internal researcher publications, global agricultural data, and live climate metrics. All recommendations are automatically saved to your history database.
+            Upload an image of your land or soil to receive an AI-powered suitability analysis combining Vision AI, agricultural research publications, global agricultural data, and live climate metrics. All recommendations are automatically saved to your history database.
           </p>
         </div>
 
@@ -563,7 +524,7 @@ export default function CropAdvisorClient({ initialAnalyses, userName }: CropAdv
                 <Info className="h-5 w-5 shrink-0 text-amber-600 mt-0.5" />
                 <div>
                   <span className="font-bold">Important Notice:</span> Suitability percentages reflect an{" "}
-                  <strong className="underline">"Estimated Suitability"</strong> based on visual topsoil analysis,
+                  <strong className="underline">&quot;Estimated Suitability&quot;</strong> based on visual topsoil analysis,
                   peer-reviewed research studies, and climate data. They do not constitute a scientifically guaranteed
                   probability of success. Laboratory soil testing (pH & N-P-K) is recommended before major planting.
                 </div>
@@ -771,14 +732,14 @@ export default function CropAdvisorClient({ initialAnalyses, userName }: CropAdv
                   </div>
                 </div>
 
-                {/* Source 2: Researcher Database */}
+                {/* Source 2: Agricultural Research Database */}
                 <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
                   <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
                     <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
                       <BookOpen size={20} />
                     </div>
                     <div>
-                      <h3 className="text-base font-bold text-slate-900">2. Researcher Database</h3>
+                      <h3 className="text-base font-bold text-slate-900">2. Agricultural Research Database</h3>
                       <p className="text-[11px] text-slate-400">Internal Studies & Publications</p>
                     </div>
                   </div>
@@ -855,7 +816,7 @@ export default function CropAdvisorClient({ initialAnalyses, userName }: CropAdv
                     {currentAnalysis.confidence_score.evidenceBreakdown.imageObservationQuality}
                   </div>
                   <div className="rounded-xl bg-white/70 p-3 border border-emerald-200/50">
-                    <span className="font-bold block">Internal Researcher Match:</span>
+                    <span className="font-bold block">Agricultural Research Match:</span>
                     {currentAnalysis.confidence_score.evidenceBreakdown.internalResearcherDataMatch}
                   </div>
                   <div className="rounded-xl bg-white/70 p-3 border border-emerald-200/50">

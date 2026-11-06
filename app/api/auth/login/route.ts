@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSessionValue, sessionCookie, SessionUser } from "@/lib/auth/session";
 import { verifyPassword } from "@/lib/auth/password";
-import { findUserByEmail } from "@/lib/db/repository";
+import { addAuditLog, findUserByEmail } from "@/lib/db/repository";
 
 export async function POST(request: Request) {
   let body: { email?: string; password?: string };
@@ -24,7 +24,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Email or password is incorrect." }, { status: 401 });
     }
 
-    if (record.status !== "active") {
+    if (record.status === "pending") {
+      return NextResponse.json({ error: "Your account is awaiting administrator approval." }, { status: 403 });
+    }
+    if (record.status === "rejected") {
+      return NextResponse.json({ error: "Your account application was declined. Please contact an administrator." }, { status: 403 });
+    }
+    if (record.status === "suspended") {
       return NextResponse.json({ error: "This account is suspended." }, { status: 403 });
     }
 
@@ -42,6 +48,11 @@ export async function POST(request: Request) {
     };
 
     const response = NextResponse.json({ user: sessionUser });
+    try {
+      await addAuditLog(record.id, "Successful Login", "users", "User signed in");
+    } catch (auditError) {
+      console.error("Login audit event could not be saved:", auditError);
+    }
     response.cookies.set(sessionCookie.name, createSessionValue(sessionUser), sessionCookie.options);
     return response;
   } catch (err: unknown) {

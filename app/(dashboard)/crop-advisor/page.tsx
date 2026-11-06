@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 
 export const metadata = {
   title: "Crop Advisor | AgriKMS",
-  description: "AI-Assisted soil and land suitability analysis combining vision models, researcher publications, and climate metrics.",
+  description: "AI-assisted soil and land suitability analysis combining vision models, agricultural research publications, and climate metrics.",
 };
 
 export default async function CropAdvisorPage() {
@@ -17,5 +17,5 @@ export default async function CropAdvisorPage() {
 
   const initialAnalyses = await getCropAdvisorAnalyses(user.id);
 
-  return <CropAdvisorClient initialAnalyses={initialAnalyses} userName={user.name} />;
+  return <CropAdvisorClient initialAnalyses={initialAnalyses} />;
 }

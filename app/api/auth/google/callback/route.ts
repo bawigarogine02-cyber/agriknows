@@ -56,43 +56,45 @@ export async function GET(request: Request) {
 
     const email = profile.email.trim().toLowerCase();
     const [rows] = await db.query("SELECT id, name, email, role, status, address FROM users WHERE email = ? LIMIT 1", [email]);
-    const record = (rows as Array<{ id: string; name: string; email: string; role: "farmer" | "researcher" | "admin" | "user"; status: "active" | "suspended"; address?: string | null }>)[0];
-
-    let user: SessionUser;
+    const record = (rows as Array<{
+      id: string;
+      name: string;
+      email: string;
+      role: "farmer" | "researcher" | "admin" | "user";
+      status: "active" | "suspended" | "pending" | "rejected";
+      address?: string | null;
+    }>)[0];
 
     if (!record) {
       const newUserId = randomUUID();
-      user = {
-        id: newUserId,
-        name: profile.name.trim(),
-        email,
-        role: "farmer",
-        status: "active",
-        address: "",
-        needsOnboarding: true,
-      };
       await db.execute(
         "INSERT INTO users (id, name, email, role, status, password_hash, address) VALUES (?, ?, ?, ?, ?, ?, NULL)",
-        [user.id, user.name, user.email, user.role, user.status, await hashPassword(randomUUID())]
+        [newUserId, profile.name.trim(), email, "farmer", "pending", await hashPassword(randomUUID())]
       );
-    } else {
-      const assignedRole: "farmer" | "researcher" | "admin" = ["farmer", "researcher", "admin"].includes(record.role)
-        ? (record.role as "farmer" | "researcher" | "admin")
-        : "farmer";
-      const needsOnboarding = !record.address || record.address.trim() === "";
-
-      user = {
-        id: record.id,
-        name: record.name,
-        email: record.email,
-        role: assignedRole,
-        status: record.status,
-        address: record.address || "",
-        needsOnboarding,
-      };
+      return NextResponse.redirect(`${baseUrl}/login?error=account_pending`);
     }
 
-    if (user.status !== "active") return NextResponse.redirect(`${baseUrl}/login?error=account_suspended`);
+    if (record.status !== "active") {
+      const error = record.status === "pending"
+        ? "account_pending"
+        : record.status === "rejected"
+        ? "account_rejected"
+        : "account_suspended";
+      return NextResponse.redirect(`${baseUrl}/login?error=${error}`);
+    }
+
+    const assignedRole: "farmer" | "researcher" | "admin" = ["farmer", "researcher", "admin"].includes(record.role)
+      ? record.role as "farmer" | "researcher" | "admin"
+      : "farmer";
+    const user: SessionUser = {
+      id: record.id,
+      name: record.name,
+      email: record.email,
+      role: assignedRole,
+      status: "active",
+      address: record.address || "",
+      needsOnboarding: !record.address || record.address.trim() === "",
+    };
     
     const destinationUrl = user.needsOnboarding ? `${baseUrl}/complete-profile` : `${baseUrl}/dashboard`;
     const response = NextResponse.redirect(destinationUrl);

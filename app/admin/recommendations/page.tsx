@@ -8,8 +8,8 @@ export default async function AdminRecommendationsPage() {
   const rows = recs.map((r) => ({
     id: r.id,
     type: r.type,
-    field_name: r.field_name || "Plot 1",
-    crop_name: r.crop_name || "Maize",
+    field_name: r.field_name || "—",
+    crop_name: r.crop_name || "—",
     rule_applied: r.rule_applied,
     created_at: new Date(r.created_at).toLocaleDateString(),
   }));

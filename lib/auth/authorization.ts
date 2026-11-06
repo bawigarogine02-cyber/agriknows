@@ -16,13 +16,6 @@ export async function requireAuth(): Promise<
     };
   }
 
-  if (user.status === "suspended") {
-    return {
-      user: null,
-      response: NextResponse.json({ error: "Account suspended. Access denied." }, { status: 403 }),
-    };
-  }
-
   return { user, response: null };
 }
 

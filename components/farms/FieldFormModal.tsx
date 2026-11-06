@@ -14,22 +14,23 @@ interface FieldFormModalProps {
 
 export default function FieldFormModal({ isOpen, farms, crops, onClose, onSuccess }: FieldFormModalProps) {
   const [farmerFarms, setFarmerFarms] = useState<Farm[]>(farms);
-  const [farmId, setFarmId] = useState(farms[0]?.id || "");
+  const [farmId, setFarmId] = useState("");
   const [isCustomFarm, setIsCustomFarm] = useState(false);
   const [customFarmName, setCustomFarmName] = useState("");
   const [customFarmLocation, setCustomFarmLocation] = useState("");
+  const [customFarmArea, setCustomFarmArea] = useState("");
 
   const [name, setName] = useState("");
   const [area, setArea] = useState("");
 
-  const [currentCropId, setCurrentCropId] = useState(crops[0]?.id || "");
+  const [currentCropId, setCurrentCropId] = useState("");
   const [isCustomCrop, setIsCustomCrop] = useState(false);
   const [customCropName, setCustomCropName] = useState("");
 
   const [plantingDate, setPlantingDate] = useState(new Date().toISOString().split("T")[0]);
-  const [soilPh, setSoilPh] = useState("6.5");
-  const [organicMatter, setOrganicMatter] = useState("3.0");
-  const [waterSource, setWaterSource] = useState("Drip Irrigation");
+  const [soilPh, setSoilPh] = useState("");
+  const [organicMatter, setOrganicMatter] = useState("");
+  const [waterSource, setWaterSource] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -37,16 +38,19 @@ export default function FieldFormModal({ isOpen, farms, crops, onClose, onSucces
   useEffect(() => {
     if (isOpen) {
       fetch("/api/farms")
-        .then((res) => (res.ok ? res.json() : null))
+        .then(async (res) => {
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || "Failed to load your farms.");
+          return data;
+        })
         .then((data) => {
           if (data?.farms && Array.isArray(data.farms)) {
             setFarmerFarms(data.farms);
-            if (data.farms.length > 0 && !farmId) {
-              setFarmId(data.farms[0].id);
-            }
           }
         })
-        .catch(() => {});
+        .catch((fetchError: unknown) => {
+          setError(fetchError instanceof Error ? fetchError.message : "Failed to load your farms.");
+        });
     }
   }, [isOpen]);
 
@@ -55,12 +59,48 @@ export default function FieldFormModal({ isOpen, farms, crops, onClose, onSucces
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
+    const fieldArea = Number(area);
+    const pHValue = Number(soilPh);
+    const organicMatterValue = Number(organicMatter);
+    if (!name.trim() || !Number.isFinite(fieldArea) || fieldArea <= 0) {
+      setError("Enter a field name and a positive field area.");
+      return;
+    }
+    if (!Number.isFinite(pHValue) || pHValue < 0 || pHValue > 14) {
+      setError("Enter a valid soil pH between 0 and 14.");
+      return;
+    }
+    if (!Number.isFinite(organicMatterValue) || organicMatterValue < 0 || organicMatterValue > 100) {
+      setError("Enter a valid organic matter percentage between 0 and 100.");
+      return;
+    }
+    if (!waterSource) {
+      setError("Select the field's water source.");
+      return;
+    }
+    if (!plantingDate || Number.isNaN(Date.parse(plantingDate))) {
+      setError("Enter a valid planting date.");
+      return;
+    }
+
+    const selectedCrop = crops.find((crop) => crop.id === currentCropId);
+    const finalCropName = isCustomCrop ? customCropName.trim() : selectedCrop?.name || "";
+    if (!finalCropName) {
+      setError("Please select or type a valid crop name.");
+      return;
+    }
+
     let targetFarmId = farmId;
 
     // Handle inline custom farm creation
     if (isCustomFarm) {
-      if (!customFarmName.trim() || !customFarmLocation.trim()) {
-        setError("Please enter the new farm name and location.");
+      const farmArea = Number(customFarmArea);
+      if (!customFarmName.trim() || !customFarmLocation.trim() || !Number.isFinite(farmArea) || farmArea <= 0) {
+        setError("Enter the new farm name, location, and positive total area.");
+        return;
+      }
+      if (fieldArea > farmArea) {
+        setError("Field area cannot exceed the new farm's total area.");
         return;
       }
       try {
@@ -71,7 +111,7 @@ export default function FieldFormModal({ isOpen, farms, crops, onClose, onSucces
             name: customFarmName.trim(),
             location: customFarmLocation.trim(),
             soil_type: "Loam",
-            total_area: Number(area) || 5.0
+            total_area: farmArea
           })
         });
         if (!farmRes.ok) {
@@ -86,16 +126,8 @@ export default function FieldFormModal({ isOpen, farms, crops, onClose, onSucces
       }
     }
 
-    if (!targetFarmId || !name.trim() || !area || Number(area) <= 0) {
-      setError("Please fill out all required fields with valid measurements.");
-      return;
-    }
-
-    const selectedCrop = crops.find(c => c.id === currentCropId);
-    const finalCropName = isCustomCrop ? customCropName.trim() : (selectedCrop?.name || "Maize (Corn)");
-
-    if (!finalCropName) {
-      setError("Please select or type a valid crop name.");
+    if (!targetFarmId) {
+      setError("Select an existing farm or add a new farm parcel.");
       return;
     }
 
@@ -109,12 +141,12 @@ export default function FieldFormModal({ isOpen, farms, crops, onClose, onSucces
         body: JSON.stringify({
           farm_id: targetFarmId,
           name: name.trim(),
-          area: Number(area),
+          area: fieldArea,
           current_crop_id: isCustomCrop ? null : currentCropId,
           crop_name: finalCropName,
           planting_date: plantingDate,
-          soil_ph: Number(soilPh),
-          organic_matter: Number(organicMatter),
+          soil_ph: pHValue,
+          organic_matter: organicMatterValue,
           water_source: waterSource
         })
       });
@@ -135,14 +167,19 @@ export default function FieldFormModal({ isOpen, farms, crops, onClose, onSucces
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-xs">
-      <div role="dialog" aria-modal="true" className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-2xl sm:p-8">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="field-form-title"
+        className="max-h-[calc(100dvh-2rem)] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl sm:p-7"
+      >
         <div className="flex items-center justify-between border-b border-slate-100 pb-4">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#e0f5eb] text-[#16875f]">
               <Layers size={22} />
             </div>
             <div>
-              <h2 className="text-xl font-extrabold text-[#123d35]">Add New Field Plot</h2>
+              <h2 id="field-form-title" className="text-xl font-extrabold text-[#123d35]">Add New Field Plot</h2>
               <p className="text-xs text-slate-500">Register land inputs for the Decision Support Engine.</p>
             </div>
           </div>
@@ -156,7 +193,7 @@ export default function FieldFormModal({ isOpen, farms, crops, onClose, onSucces
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           {/* Parent Farm Parcel */}
           <div>
-            <div className="flex items-center justify-between">
+            <div className="flex min-h-10 items-start justify-between gap-2">
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">Parent Farm Parcel *</label>
               <button
                 type="button"
@@ -189,6 +226,15 @@ export default function FieldFormModal({ isOpen, farms, crops, onClose, onSucces
                   onChange={(e) => setCustomFarmLocation(e.target.value)}
                   className="rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-[#16875f]"
                 />
+                <input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  placeholder="Farm total area (hectares)"
+                  value={customFarmArea}
+                  onChange={(e) => setCustomFarmArea(e.target.value)}
+                  className="rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-[#16875f]"
+                />
               </div>
             ) : (
               <select
@@ -202,6 +248,7 @@ export default function FieldFormModal({ isOpen, farms, crops, onClose, onSucces
                 }}
                 className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm font-medium text-slate-800 outline-none focus:border-[#16875f] focus:bg-white"
               >
+                <option value="" disabled>Select a farm</option>
                 {farmerFarms.map((f) => (
                   <option key={f.id} value={f.id}>
                     {f.name} ({f.location})
@@ -238,7 +285,7 @@ export default function FieldFormModal({ isOpen, farms, crops, onClose, onSucces
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <div className="flex items-center justify-between">
+              <div className="flex min-h-10 items-start justify-between gap-2">
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">Current Crop</label>
                 <button
                   type="button"
@@ -272,6 +319,7 @@ export default function FieldFormModal({ isOpen, farms, crops, onClose, onSucces
                   }}
                   className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm font-medium text-slate-800 outline-none focus:border-[#16875f]"
                 >
+                  <option value="" disabled>Select a crop</option>
                   {crops.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
@@ -283,7 +331,9 @@ export default function FieldFormModal({ isOpen, farms, crops, onClose, onSucces
             </div>
 
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">Planting Date</label>
+              <div className="min-h-10">
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">Planting Date</label>
+              </div>
               <input
                 type="date"
                 value={plantingDate}
@@ -293,38 +343,51 @@ export default function FieldFormModal({ isOpen, farms, crops, onClose, onSucces
             </div>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">Soil pH</label>
+          <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+            <div className="min-w-0">
+              <div className="mb-1.5 min-h-10">
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">Soil pH *</label>
+                <p className="text-xs text-slate-500">Test or estimate</p>
+              </div>
               <input
                 type="number"
                 step="0.1"
-                min="4.0"
-                max="9.0"
+                min="0"
+                max="14"
+                required
                 value={soilPh}
                 onChange={(e) => setSoilPh(e.target.value)}
                 className="mt-1.5 w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-[#16875f]"
               />
             </div>
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">Organic Matter (%)</label>
+            <div className="min-w-0">
+              <div className="mb-1.5 min-h-10">
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">Organic Matter (%) *</label>
+                <p className="text-xs text-slate-500">Test or estimate</p>
+              </div>
               <input
                 type="number"
                 step="0.1"
-                min="0.1"
-                max="15.0"
+                min="0"
+                max="100"
+                required
                 value={organicMatter}
                 onChange={(e) => setOrganicMatter(e.target.value)}
                 className="mt-1.5 w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-[#16875f]"
               />
             </div>
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">Water Source</label>
+            <div className="min-w-0">
+              <div className="mb-1.5 min-h-10">
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">Water Source *</label>
+                <p className="text-xs text-slate-500">Select the primary source</p>
+              </div>
               <select
+                required
                 value={waterSource}
                 onChange={(e) => setWaterSource(e.target.value)}
                 className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50 px-2 py-2.5 text-xs font-medium text-slate-800 outline-none focus:border-[#16875f]"
               >
+                <option value="" disabled>Select water source</option>
                 <option value="Rainfed">Rainfed</option>
                 <option value="Drip Irrigation">Drip Irrigation</option>
                 <option value="Canal System">Canal System</option>

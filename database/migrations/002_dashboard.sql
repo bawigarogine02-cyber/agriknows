@@ -21,7 +21,7 @@ CREATE TABLE fields (
 CREATE TABLE crop_plantings (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   field_id BIGINT UNSIGNED NOT NULL,
-  crop_id BIGINT UNSIGNED NOT NULL,a
+  crop_id BIGINT UNSIGNED NOT NULL,
   planted_on DATE NULL,
   expected_harvest_on DATE NULL,
   health_status ENUM('healthy', 'watch', 'critical') NOT NULL DEFAULT 'healthy',

@@ -26,7 +26,7 @@ export default async function DecisionSupportPage() {
           Decision Support Engine
         </h1>
         <p className="mt-2 max-w-3xl text-sm leading-relaxed text-[#45675e]">
-          Match your logged farm parameters against predefined agricultural rule matrices to generate specific N-P-K fertilizer schedules and irrigation volume guidance.
+          Use your recorded crop, soil, water source, crop stage, and recent rainfall to generate cautious fertilizer and irrigation guidance. Confirm nutrient needs with soil testing and local agricultural extension advice.
         </p>
       </header>
 

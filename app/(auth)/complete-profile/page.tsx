@@ -6,7 +6,7 @@ import { Leaf, MapPin, UserCheck, Sprout, Microscope } from "lucide-react";
 import PageContainer from "@/components/layout/PageContainer";
 
 export default function CompleteProfilePage() {
-  const [selectedRole, setSelectedRole] = useState<"Farmer" | "Researcher">("Farmer");
+  const [selectedRole, setSelectedRole] = useState<"farmer" | "researcher">("farmer");
   const [address, setAddress] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -71,9 +71,9 @@ export default function CompleteProfilePage() {
               <div className="grid gap-4 sm:grid-cols-2">
                 <button
                   type="button"
-                  onClick={() => setSelectedRole("Farmer")}
+                  onClick={() => setSelectedRole("farmer")}
                   className={`flex flex-col items-start p-5 rounded-xl border text-left transition ${
-                    selectedRole === "Farmer"
+                    selectedRole === "farmer"
                       ? "border-[#2D5A27] bg-[#2D5A27]/5 ring-2 ring-[#2D5A27]"
                       : "border-[#E2E8E1] bg-white hover:border-[#2D5A27]/40"
                   }`}
@@ -82,7 +82,7 @@ export default function CompleteProfilePage() {
                     <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#2D5A27] text-white">
                       <Sprout className="h-5 w-5" />
                     </div>
-                    {selectedRole === "Farmer" && <UserCheck className="h-5 w-5 text-[#2D5A27]" />}
+                    {selectedRole === "farmer" && <UserCheck className="h-5 w-5 text-[#2D5A27]" />}
                   </div>
                   <span className="font-bold text-[#1A201A]">Farmer</span>
                   <span className="mt-1 text-xs text-[#5C635A]">
@@ -92,9 +92,9 @@ export default function CompleteProfilePage() {
 
                 <button
                   type="button"
-                  onClick={() => setSelectedRole("Researcher")}
+                  onClick={() => setSelectedRole("researcher")}
                   className={`flex flex-col items-start p-5 rounded-xl border text-left transition ${
-                    selectedRole === "Researcher"
+                    selectedRole === "researcher"
                       ? "border-[#2D5A27] bg-[#2D5A27]/5 ring-2 ring-[#2D5A27]"
                       : "border-[#E2E8E1] bg-white hover:border-[#2D5A27]/40"
                   }`}
@@ -103,9 +103,9 @@ export default function CompleteProfilePage() {
                     <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#8B4513] text-white">
                       <Microscope className="h-5 w-5" />
                     </div>
-                    {selectedRole === "Researcher" && <UserCheck className="h-5 w-5 text-[#2D5A27]" />}
+                    {selectedRole === "researcher" && <UserCheck className="h-5 w-5 text-[#2D5A27]" />}
                   </div>
-                  <span className="font-bold text-[#1A201A]">Researcher</span>
+                  <span className="font-bold text-[#1A201A]">Agricultural Researcher</span>
                   <span className="mt-1 text-xs text-[#5C635A]">
                     Publish agricultural papers, review farmer inquiries, and contribute agronomic data.
                   </span>

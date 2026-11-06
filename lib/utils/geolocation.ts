@@ -5,14 +5,6 @@ export type GeolocationResult = {
   locationName: string;
 };
 
-// Default fallback location (Laray, Talisay City, Cebu, Philippines)
-const DEFAULT_LOCATION: GeolocationResult = {
-  latitude: 10.2520,
-  longitude: 123.8396,
-  accuracy: 10,
-  locationName: "Laray, Talisay City, Cebu, Philippines",
-};
-
 /**
  * HTML5 Geolocation Hardware Options
  */
@@ -26,11 +18,6 @@ export const GPS_OPTIONS: PositionOptions = {
  * Reverse geocodes coordinates to a clean human-readable location name
  */
 export async function reverseGeocodeToLocationName(lat: number, lon: number): Promise<string> {
-  // Check if position matches the user's local farm region (Laray, Talisay City, Cebu)
-  if (Math.abs(lat - 10.2520) < 0.25 && Math.abs(lon - 123.8396) < 0.25) {
-    return "Laray, Talisay City, Cebu, Philippines";
-  }
-
   try {
     const response = await fetch(
       `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&zoom=18`,
@@ -54,19 +41,15 @@ export async function reverseGeocodeToLocationName(lat: number, lon: number): Pr
       if (parts.length >= 2) return parts.join(", ");
       if (data.display_name) return data.display_name.split(",").slice(0, 3).join(", ");
     }
-  } catch {}
+  } catch (error) {
+    console.warn("Reverse geocoding failed:", error);
+  }
 
-  return DEFAULT_LOCATION.locationName;
+  return `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
 }
 
-/**
- * Synchronous fallback formatter for location names
- */
 export function formatLocationName(lat: number, lon: number): string {
-  if (Math.abs(lat - 10.2520) < 0.25 && Math.abs(lon - 123.8396) < 0.25) {
-    return "Laray, Talisay City, Cebu, Philippines";
-  }
-  return DEFAULT_LOCATION.locationName;
+  return `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
 }
 
 /**
@@ -74,7 +57,7 @@ export function formatLocationName(lat: number, lon: number): string {
  */
 export async function getAccurateUserLocation(): Promise<GeolocationResult> {
   if (typeof window === "undefined" || !navigator.geolocation) {
-    return DEFAULT_LOCATION;
+    throw new Error("Location services are unavailable in this browser.");
   }
 
   try {
@@ -94,8 +77,8 @@ export async function getAccurateUserLocation(): Promise<GeolocationResult> {
       locationName,
     };
   } catch (err) {
-    console.warn("HTML5 Geolocation hardware position fallback", err);
-    return DEFAULT_LOCATION;
+    console.warn("Unable to get the browser's current location:", err);
+    throw new Error("Unable to get your current location. Check location permissions and try again.");
   }
 }
 

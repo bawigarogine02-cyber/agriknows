@@ -17,6 +17,17 @@ function LoginFormContent() {
   const searchParams = useSearchParams();
 
   const googleError = searchParams.get("error");
+  const googleErrorMessage = googleError === "account_pending"
+    ? "Your account is awaiting administrator approval."
+    : googleError === "account_rejected"
+    ? "Your account application was declined. Please contact an administrator."
+    : googleError === "account_suspended"
+    ? "This account is suspended."
+    : googleError === "google_cancelled"
+    ? "Google sign-in was cancelled."
+    : googleError
+    ? "Google sign-in failed. Please try again or use your email and password."
+    : "";
 
   const handleGoogleLogin = async () => {
     setError("");
@@ -111,7 +122,7 @@ function LoginFormContent() {
 
             {(error || googleError) && (
               <p role="alert" className="mb-5 rounded-lg border border-[#e8b9a5] bg-[#fff5ef] px-4 py-3 text-sm text-[#9a3c20]">
-                {error || (googleError === "google_cancelled" ? "Google sign-in was cancelled." : "Google sign-in failed. Please try again or use your email and password.")}
+                {error || googleErrorMessage}
               </p>
             )}
 

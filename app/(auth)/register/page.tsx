@@ -1,33 +1,44 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Leaf, LockKeyhole, Mail, MapPin, UserRound } from "lucide-react";
 import PageContainer from "@/components/layout/PageContainer";
 
-const roles = ["Farmer", "Researcher"];
+const roles = [
+  { value: "farmer", label: "Farmer" },
+  { value: "researcher", label: "Agricultural Researcher" },
+];
 
 export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [error, setError] = useState("");
+  const [pendingApproval, setPendingApproval] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const router = useRouter();
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setIsSubmitting(true);
     setError("");
     const values = Object.fromEntries(new FormData(event.currentTarget).entries());
-    const response = await fetch("/api/auth/register", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(values) });
-    const data = await response.json();
-    if (!response.ok) {
-      setError(data.error ?? "Unable to create your account.");
+    try {
+      const response = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(values),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setError(data.error ?? "Unable to create your account.");
+        return;
+      }
+      setPendingApproval(true);
+    } catch {
+      setError("Unable to connect to the registration service. Please try again.");
+    } finally {
       setIsSubmitting(false);
-      return;
     }
-    router.push("/dashboard");
   };
 
   return (
@@ -78,7 +89,17 @@ export default function RegisterPage() {
             </header>
 
             {error && <p role="alert" className="mb-5 rounded-lg border border-[#e8b9a5] bg-[#fff5ef] px-4 py-3 text-sm text-[#9a3c20]">{error}</p>}
-            <form onSubmit={handleSubmit} className="space-y-5">
+            {pendingApproval ? (
+              <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-5 text-sm text-emerald-900">
+                <h2 className="font-bold">Account submitted for approval</h2>
+                <p className="mt-2 leading-6">
+                  An administrator must approve your farmer or agricultural researcher account before you can sign in.
+                </p>
+                <a href="/login" className="mt-4 inline-block font-bold text-[#2D5A27] hover:underline">
+                  Go to sign in
+                </a>
+              </div>
+            ) : <form onSubmit={handleSubmit} className="space-y-5">
               <div>
                 <label htmlFor="full-name" className="mb-2 block text-sm font-semibold text-[#1A201A]">
                   Full Name
@@ -163,8 +184,8 @@ export default function RegisterPage() {
                       Select your role
                     </option>
                     {roles.map((role) => (
-                      <option key={role} value={role}>
-                        {role}
+                      <option key={role.value} value={role.value}>
+                        {role.label}
                       </option>
                     ))}
                   </select>
@@ -245,7 +266,7 @@ export default function RegisterPage() {
               >
                 {isSubmitting ? "Creating account..." : "Create Account"}
               </button>
-            </form>
+            </form>}
 
             <p className="mt-7 text-center text-sm text-[#5C635A]">
               Already have an account?{" "}

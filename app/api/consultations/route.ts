@@ -7,7 +7,7 @@ export async function GET() {
   if (!session) {
     return NextResponse.json({ error: "Authentication required" }, { status: 401 });
   }
-  const consultations = await getConsultations();
+  const consultations = await getConsultations(session.id, session.role);
   return NextResponse.json({ consultations });
 }
 

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth/authorization";
-import { deleteUserRecord } from "@/lib/db/repository";
+import { addAuditLog, deleteUserRecord } from "@/lib/db/repository";
 
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const access = await requireAdmin();
@@ -11,6 +11,9 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
     return NextResponse.json({ error: "You cannot delete your own account." }, { status: 400 });
   }
 
-  await deleteUserRecord(id);
+  if (!(await deleteUserRecord(id))) {
+    return NextResponse.json({ error: "User account not found." }, { status: 404 });
+  }
+  await addAuditLog(access.user.id, "Deleted User Account", "users", `Deleted user account '${id}'`);
   return NextResponse.json({ ok: true });
 }

@@ -12,7 +12,7 @@ interface AskExpertFormProps {
 }
 
 export default function AskExpertForm({ isOpen, crops, onClose, onSuccess }: AskExpertFormProps) {
-  const [cropName, setCropName] = useState(crops[0]?.name || "Maize (Corn)");
+  const [cropName, setCropName] = useState(crops[0]?.name || "");
   const [isCustomCrop, setIsCustomCrop] = useState(false);
   const [customCropName, setCustomCropName] = useState("");
   const [subject, setSubject] = useState("");
@@ -69,7 +69,7 @@ export default function AskExpertForm({ isOpen, crops, onClose, onSuccess }: Ask
             </div>
             <div>
               <h2 className="text-xl font-extrabold text-[#123d35]">Ask an Agricultural Expert</h2>
-              <p className="text-xs text-slate-500">Connect directly with verified agronomists & researchers.</p>
+              <p className="text-xs text-slate-500">Connect directly with verified agronomists and agricultural researchers.</p>
             </div>
           </div>
           <button type="button" onClick={onClose} className="rounded-lg p-1 text-slate-400 hover:bg-slate-100">
@@ -115,6 +115,7 @@ export default function AskExpertForm({ isOpen, crops, onClose, onSuccess }: Ask
                 }}
                 className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm font-semibold text-slate-800 outline-none focus:border-[#16875f]"
               >
+                {!cropName && <option value="" disabled>Select a crop</option>}
                 {crops.map((c) => (
                   <option key={c.id} value={c.name}>
                     {c.name}

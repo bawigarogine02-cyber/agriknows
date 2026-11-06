@@ -1,14 +1,17 @@
 "use client";
 
-import { Plus, Search, ShieldAlert, Trash2, UserCheck, UserPlus, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { CheckCircle2, Search, Trash2, UserPlus, X, XCircle } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import type { UserAccountRole, UserAccountStatus } from "@/lib/db/repository";
+import { getRoleLabel } from "@/lib/utils/role-label";
 
 type AdminUser = {
   id: string;
   name: string;
   email: string;
-  role: "farmer" | "researcher" | "admin";
-  status: "active" | "suspended";
+  address: string | null;
+  role: UserAccountRole;
+  status: UserAccountStatus;
   createdAt: string;
 };
 
@@ -16,6 +19,7 @@ export default function AdminUsersTable() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [error, setError] = useState("");
@@ -31,14 +35,21 @@ export default function AdminUsersTable() {
     name: "",
     email: "",
     password: "",
-    role: "farmer" as "farmer" | "researcher" | "admin",
-    status: "active" as "active" | "suspended",
+    role: "farmer" as UserAccountRole,
+    status: "active" as UserAccountStatus,
     address: "",
   });
 
+  const getUsersUrl = useCallback(() => {
+    const params = new URLSearchParams({ search, page: String(page), pageSize: String(pageSize) });
+    if (roleFilter !== "all") params.set("role", roleFilter);
+    if (statusFilter !== "all") params.set("status", statusFilter);
+    return `/api/admin/users?${params}`;
+  }, [page, roleFilter, search, statusFilter]);
+
   async function loadUsers() {
     try {
-      const response = await fetch(`/api/admin/users?search=${encodeURIComponent(search)}&page=${page}&pageSize=${pageSize}`);
+      const response = await fetch(getUsersUrl());
       const data = await response.json();
       if (!response.ok) {
         setError(data.error ?? "Unable to load users.");
@@ -53,7 +64,7 @@ export default function AdminUsersTable() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`/api/admin/users?search=${encodeURIComponent(search)}&page=${page}&pageSize=${pageSize}`)
+    fetch(getUsersUrl())
       .then(async (response) => ({ response, data: await response.json() }))
       .then(({ response, data }) => {
         if (cancelled) return;
@@ -70,7 +81,7 @@ export default function AdminUsersTable() {
     return () => {
       cancelled = true;
     };
-  }, [page, search]);
+  }, [getUsersUrl]);
 
   async function handleAddUserSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -158,10 +169,7 @@ export default function AdminUsersTable() {
     }
   }
 
-  const displayedUsers = users.filter((u) => {
-    if (roleFilter === "all") return true;
-    return u.role === roleFilter;
-  });
+  const displayedUsers = users;
 
   return (
     <>
@@ -175,13 +183,32 @@ export default function AdminUsersTable() {
           <div className="flex flex-wrap items-center gap-3">
             <select
               value={roleFilter}
-              onChange={(e) => setRoleFilter(e.target.value)}
+              onChange={(e) => {
+                setPage(1);
+                setRoleFilter(e.target.value);
+              }}
               className="h-11 rounded-lg border border-slate-200 px-3 text-xs font-bold text-slate-700 outline-none"
             >
               <option value="all">All Roles</option>
               <option value="farmer">Farmer Accounts</option>
-              <option value="researcher">Researcher Accounts</option>
+              <option value="researcher">Agricultural Researcher Accounts</option>
               <option value="admin">Admin Accounts</option>
+            </select>
+
+            <select
+              value={statusFilter}
+              onChange={(event) => {
+                setPage(1);
+                setStatusFilter(event.target.value);
+              }}
+              aria-label="Filter users by approval status"
+              className="h-11 rounded-lg border border-slate-200 px-3 text-xs font-bold text-slate-700 outline-none"
+            >
+              <option value="all">All Statuses</option>
+              <option value="pending">Pending Approval</option>
+              <option value="active">Approved</option>
+              <option value="rejected">Rejected</option>
+              <option value="suspended">Suspended</option>
             </select>
 
             <label className="flex h-11 w-full items-center gap-3 rounded-lg border border-slate-200 px-3 text-slate-400 sm:w-64">
@@ -231,6 +258,7 @@ export default function AdminUsersTable() {
                   <td className="px-6 py-4">
                     <p className="font-bold text-slate-900 text-sm">{user.name}</p>
                     <p className="mt-0.5 text-slate-500">{user.email}</p>
+                    <p className="mt-0.5 text-slate-400">{user.address || "No address provided"}</p>
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
@@ -243,7 +271,7 @@ export default function AdminUsersTable() {
                             : "bg-emerald-100 text-emerald-800"
                         }`}
                       >
-                        {user.role}
+                        {getRoleLabel(user.role)}
                       </span>
                       <select
                         value={user.role}
@@ -251,21 +279,59 @@ export default function AdminUsersTable() {
                         className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-semibold bg-white outline-none"
                       >
                         <option value="farmer">Farmer</option>
-                        <option value="researcher">Researcher</option>
-                        <option value="admin">Admin</option>
+                        <option value="researcher">Agricultural Researcher</option>
+                        <option value="admin">Administrator</option>
                       </select>
                     </div>
                   </td>
                   <td className="px-6 py-4">
-                    <button
-                      type="button"
-                      onClick={() => void updateUser(user.id, { status: user.status === "active" ? "suspended" : "active" })}
-                      className={`rounded-full px-3 py-1 text-xs font-bold capitalize transition ${
-                        user.status === "active" ? "bg-[#e0f5eb] text-[#25805e] hover:bg-emerald-200" : "bg-[#fff5dd] text-[#8b6517] hover:bg-amber-200"
-                      }`}
-                    >
-                      {user.status}
-                    </button>
+                    <span className={`rounded-full px-3 py-1 text-xs font-bold capitalize ${
+                      user.status === "active"
+                        ? "bg-[#e0f5eb] text-[#25805e]"
+                        : user.status === "pending"
+                        ? "bg-amber-100 text-amber-800"
+                        : user.status === "rejected"
+                        ? "bg-rose-100 text-rose-800"
+                        : "bg-slate-100 text-slate-700"
+                    }`}>
+                      {user.status === "active" ? "approved" : user.status}
+                    </span>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {user.status === "pending" ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => void updateUser(user.id, { status: "active" })}
+                            className="inline-flex items-center gap-1 rounded-lg bg-emerald-700 px-2.5 py-1.5 text-[11px] font-bold text-white hover:bg-emerald-800"
+                          >
+                            <CheckCircle2 size={13} /> Approve
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void updateUser(user.id, { status: "rejected" })}
+                            className="inline-flex items-center gap-1 rounded-lg bg-rose-700 px-2.5 py-1.5 text-[11px] font-bold text-white hover:bg-rose-800"
+                          >
+                            <XCircle size={13} /> Reject
+                          </button>
+                        </>
+                      ) : user.status === "active" ? (
+                        <button
+                          type="button"
+                          onClick={() => void updateUser(user.id, { status: "suspended" })}
+                          className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-[11px] font-bold text-slate-600 hover:bg-slate-100"
+                        >
+                          Suspend
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => void updateUser(user.id, { status: "active" })}
+                          className="rounded-lg border border-emerald-200 px-2.5 py-1.5 text-[11px] font-bold text-emerald-800 hover:bg-emerald-50"
+                        >
+                          Approve / Activate
+                        </button>
+                      )}
+                    </div>
                   </td>
                   <td className="px-6 py-4 text-slate-500 font-medium">
                     {new Date(user.createdAt).toLocaleDateString()}
@@ -286,7 +352,7 @@ export default function AdminUsersTable() {
           </table>
         </div>
 
-        {displayedUsers.length === 0 && <p className="p-8 text-center text-slate-500">No user accounts match your search/filter.</p>}
+        {displayedUsers.length === 0 && <p className="p-8 text-center text-slate-500">No user accounts match your search/filters.</p>}
 
         <div className="flex items-center justify-between border-t border-slate-100 px-6 py-4 text-xs font-semibold text-slate-600">
           <span>
@@ -397,7 +463,7 @@ export default function AdminUsersTable() {
                     className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-xs outline-none focus:border-[#16875f]"
                   >
                     <option value="farmer">Farmer</option>
-                    <option value="researcher">Researcher</option>
+                    <option value="researcher">Agricultural Researcher</option>
                     <option value="admin">Administrator</option>
                   </select>
                 </div>

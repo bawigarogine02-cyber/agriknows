@@ -31,7 +31,7 @@ export default function ResearchPublicationsFeed({
             className="flex items-center gap-2 rounded-xl bg-[#16875f] px-4 py-2.5 text-xs font-bold text-white shadow-md hover:bg-[#064b3b]"
           >
             <Plus size={16} />
-            Publish Study (Researcher View)
+            Publish Study (Agricultural Researcher)
           </button>
         )}
       </div>

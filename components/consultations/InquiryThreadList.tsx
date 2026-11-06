@@ -143,7 +143,7 @@ export default function InquiryThreadList({ consultations, onReplyAdded }: Inqui
                     <div className="flex items-center justify-between font-bold">
                       <span className="flex items-center gap-1.5">
                         <User size={14} className={isResearcher ? "text-[#16875f]" : "text-slate-500"} />
-                        {reply.sender_name} {isResearcher ? "(Researcher Expert)" : ""}
+                        {reply.sender_name} {isResearcher ? "(Agricultural Researcher)" : ""}
                       </span>
                       <span className="text-[10px] text-slate-400">
                         {new Date(reply.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}

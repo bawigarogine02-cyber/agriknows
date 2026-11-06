@@ -4,11 +4,15 @@ import { requireAdmin } from "@/lib/auth/authorization";
 import { hashPassword } from "@/lib/auth/password";
 import {
   addAuditLog,
+  createNotification,
   createUserRecord,
   findUserByEmail,
-  getUsersFromDbOrMemory,
+  getUsers,
   updateUserRoleOrStatus,
+  type UserAccountRole,
+  type UserAccountStatus,
 } from "@/lib/db/repository";
+import { getRoleLabel } from "@/lib/utils/role-label";
 
 export async function GET(request: Request) {
   const access = await requireAdmin();
@@ -18,8 +22,18 @@ export async function GET(request: Request) {
   const search = params.get("search")?.trim() ?? "";
   const page = Math.max(1, Number(params.get("page") ?? 1));
   const pageSize = Math.min(50, Math.max(5, Number(params.get("pageSize") ?? 10)));
+  const statusValue = params.get("status");
+  const roleValue = params.get("role");
+  if (statusValue && !["pending", "active", "suspended", "rejected"].includes(statusValue)) {
+    return NextResponse.json({ error: "Invalid account status filter." }, { status: 400 });
+  }
+  if (roleValue && !["farmer", "researcher", "admin"].includes(roleValue)) {
+    return NextResponse.json({ error: "Invalid account role filter." }, { status: 400 });
+  }
+  const status = statusValue as UserAccountStatus | null;
+  const role = roleValue as UserAccountRole | null;
 
-  const result = await getUsersFromDbOrMemory(search, page, pageSize);
+  const result = await getUsers(search, page, pageSize, status || undefined, role || undefined);
   return NextResponse.json(result);
 }
 
@@ -32,7 +46,7 @@ export async function POST(request: Request) {
     email?: string;
     password?: string;
     role?: "farmer" | "researcher" | "admin";
-    status?: "active" | "suspended";
+    status?: "active" | "suspended" | "pending" | "rejected";
     address?: string;
   };
 
@@ -45,8 +59,14 @@ export async function POST(request: Request) {
   const name = body.name?.trim();
   const email = body.email?.trim().toLowerCase();
   const password = body.password;
-  const role = body.role && ["farmer", "researcher", "admin"].includes(body.role) ? body.role : "farmer";
-  const status = body.status && ["active", "suspended"].includes(body.status) ? body.status : "active";
+  if (body.role && !["farmer", "researcher", "admin"].includes(body.role)) {
+    return NextResponse.json({ error: "Role must be farmer, agricultural researcher, or administrator." }, { status: 400 });
+  }
+  const role = body.role || "farmer";
+  if (body.status && !["active", "suspended", "pending", "rejected"].includes(body.status)) {
+    return NextResponse.json({ error: "Invalid account status." }, { status: 400 });
+  }
+  const status = body.status || "active";
   const address = body.address?.trim() || "";
 
   if (!name || !email || !password || password.length < 6) {
@@ -75,12 +95,21 @@ export async function POST(request: Request) {
       address,
     });
 
-    addAuditLog(
+    await addAuditLog(
       access.user.id,
       "Created User Account",
       "users",
-      `Admin created user account '${name}' (${email}) with role '${role}'`
+      `Admin created user account '${name}' (${email}) with role '${getRoleLabel(role)}'`
     );
+    try {
+      await createNotification(
+        newUser.id,
+        "Your account is ready",
+        `An administrator created your ${getRoleLabel(role).toLowerCase()} account.`
+      );
+    } catch (notificationError) {
+      console.error("New account notification could not be saved:", notificationError);
+    }
 
     return NextResponse.json(
       {
@@ -106,7 +135,11 @@ export async function PATCH(request: Request) {
   const access = await requireAdmin();
   if (access.response) return access.response;
 
-  let body: { id?: string; role?: "farmer" | "researcher" | "admin"; status?: "active" | "suspended" };
+  let body: {
+    id?: string;
+    role?: "farmer" | "researcher" | "admin";
+    status?: "active" | "suspended" | "pending" | "rejected";
+  };
   try {
     body = (await request.json()) as typeof body;
   } catch {
@@ -117,10 +150,37 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "A user id and update role/status are required." }, { status: 400 });
   }
 
-  if (body.id === access.user.id && body.status === "suspended") {
-    return NextResponse.json({ error: "You cannot suspend your own account." }, { status: 400 });
+  if (body.role && !["farmer", "researcher", "admin"].includes(body.role)) {
+    return NextResponse.json({ error: "Role must be farmer, agricultural researcher, or administrator." }, { status: 400 });
+  }
+  if (body.status && !["active", "suspended", "pending", "rejected"].includes(body.status)) {
+    return NextResponse.json({ error: "Invalid account status." }, { status: 400 });
+  }
+  if (body.id === access.user.id && body.status && body.status !== "active") {
+    return NextResponse.json({ error: "You cannot deactivate your own account." }, { status: 400 });
   }
 
-  await updateUserRoleOrStatus(body.id, body.role, body.status);
+  const updated = await updateUserRoleOrStatus(body.id, body.role, body.status);
+  if (!updated) return NextResponse.json({ error: "User account not found." }, { status: 404 });
+  if (body.role || body.status) {
+    await addAuditLog(
+      access.user.id,
+      body.status === "active" ? "Approved User Account" : body.status === "rejected" ? "Rejected User Account" : "Updated User Account",
+      "users",
+      `Updated account ${body.id}${body.role ? ` role to '${getRoleLabel(body.role)}'` : ""}${body.status ? ` status to '${body.status}'` : ""}`
+    );
+    if (body.status === "active" || body.status === "rejected" || body.status === "suspended") {
+      const title = body.status === "active"
+        ? "Your account has been approved"
+        : body.status === "rejected"
+          ? "Your account application was declined"
+          : "Your account has been suspended";
+      try {
+        await createNotification(body.id, title, `An administrator changed your account status to ${body.status}.`);
+      } catch (notificationError) {
+        console.error("Account status notification could not be saved:", notificationError);
+      }
+    }
+  }
   return NextResponse.json({ ok: true });
 }

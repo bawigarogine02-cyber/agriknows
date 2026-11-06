@@ -1,7 +1,7 @@
 "use client";
 
 import { AuditLog } from "@/lib/db/repository";
-import { Activity, Clock, Database, Globe, Monitor, Search, ShieldAlert, User } from "lucide-react";
+import { Database, Search, User } from "lucide-react";
 import { useEffect, useState } from "react";
 
 interface AdminAuditFeedProps {
@@ -13,26 +13,36 @@ export default function AdminAuditFeed({ initialLogs = [] }: AdminAuditFeedProps
   const [search, setSearch] = useState("");
   const [targetFilter, setTargetFilter] = useState("all");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
+    let isMounted = true;
     async function fetchLogs() {
       setLoading(true);
       try {
         const res = await fetch("/api/admin/audit");
-        if (res.ok) {
-          const data = await res.json();
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Unable to refresh audit activity.");
+        if (!Array.isArray(data.logs)) throw new Error("The audit service returned an invalid log list.");
+        if (isMounted) {
           setLogs(data.logs);
+          setError("");
         }
-      } catch {
-        // ignore
+      } catch (fetchError) {
+        if (isMounted) {
+          setError(fetchError instanceof Error ? fetchError.message : "Unable to refresh audit activity.");
+        }
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     }
-    if (initialLogs.length === 0) {
-      void fetchLogs();
-    }
-  }, [initialLogs]);
+    void fetchLogs();
+    const timer = window.setInterval(() => void fetchLogs(), 30_000);
+    return () => {
+      isMounted = false;
+      window.clearInterval(timer);
+    };
+  }, []);
 
   const filteredLogs = logs.filter((log) => {
     const matchesSearch =
@@ -49,8 +59,11 @@ export default function AdminAuditFeed({ initialLogs = [] }: AdminAuditFeedProps
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-4">
         <div>
           <h3 className="text-xl font-bold text-[#123d35]">Activity Audit Log Feed</h3>
-          <p className="mt-0.5 text-xs text-slate-500">Real-time compliance audit trail of user actions & system events.</p>
+          <p className="mt-0.5 text-xs text-slate-500" aria-live="polite">
+            {loading ? "Refreshing activity..." : "Compliance activity log. Automatically refreshes every 30 seconds."}
+          </p>
         </div>
+        {error && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">{error}</p>}
 
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 text-slate-400 sm:w-64">
@@ -71,9 +84,12 @@ export default function AdminAuditFeed({ initialLogs = [] }: AdminAuditFeedProps
           >
             <option value="all">All Target Tables</option>
             <option value="recommendations">recommendations</option>
+            <option value="analyses">analyses</option>
             <option value="farms">farms</option>
             <option value="fields">fields</option>
+            <option value="crops">crops</option>
             <option value="consultations">consultations</option>
+            <option value="consultation_replies">consultation_replies</option>
             <option value="research_publications">research_publications</option>
             <option value="users">users</option>
           </select>
@@ -99,9 +115,9 @@ export default function AdminAuditFeed({ initialLogs = [] }: AdminAuditFeedProps
                 <td className="p-4">
                   <span className="flex items-center gap-1.5 font-bold text-[#123d35]">
                     <User size={14} className="text-[#16875f]" />
-                    {log.user_name || "Active User"}
+                    {log.user_name || "Deleted or unavailable user"}
                   </span>
-                  <span className="block text-[11px] text-slate-400">{log.user_email || "user@agrikms.org"}</span>
+                  <span className="block text-[11px] text-slate-400">{log.user_email || "Email unavailable"}</span>
                 </td>
                 <td className="p-4">
                   <span className="rounded-md bg-[#e0f5eb] px-2.5 py-1 font-bold text-[#16875f]">
@@ -116,8 +132,12 @@ export default function AdminAuditFeed({ initialLogs = [] }: AdminAuditFeedProps
                 </td>
                 <td className="p-4 text-slate-700 max-w-xs truncate">{log.details}</td>
                 <td className="p-4">
-                  <span className="block text-slate-700 font-medium">{log.ip_address}</span>
-                  <span className="block text-[10px] text-slate-400 truncate max-w-[140px]">{log.device_info}</span>
+                  <span className="block text-slate-700 font-medium">
+                    {!log.ip_address || log.ip_address === "127.0.0.1" ? "IP not captured" : log.ip_address}
+                  </span>
+                  <span className="block text-[10px] text-slate-400 truncate max-w-[140px]">
+                    {!log.device_info || log.device_info === "Browser Client" ? "Device not captured" : log.device_info}
+                  </span>
                 </td>
                 <td className="p-4 text-slate-400 font-medium whitespace-nowrap">
                   {new Date(log.created_at).toLocaleString()}

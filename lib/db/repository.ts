@@ -20,6 +20,9 @@ export interface Field {
   area: number;
   current_crop_id: string | null;
   crop_name?: string;
+  crop_ideal_ph_min?: number;
+  crop_ideal_ph_max?: number;
+  crop_water_requirement?: string;
   planting_date: string;
   soil_ph: number;
   organic_matter: number;
@@ -42,6 +45,17 @@ export interface Crop {
   category?: string;
   stage?: string;
   detail?: string;
+  soil?: string;
+  minimum_temperature?: number | null;
+  maximum_temperature?: number | null;
+  minimum_rainfall?: number | null;
+  maximum_rainfall?: number | null;
+  minimum_soil_temperature?: number | null;
+  maximum_soil_temperature?: number | null;
+  minimum_soil_moisture?: number | null;
+  maximum_soil_moisture?: number | null;
+  sunlight?: string;
+  terrain?: string;
 }
 
 export interface PestDisease {
@@ -63,6 +77,8 @@ export interface Article {
   category: string;
   summary: string;
   body: string;
+  evidence_note?: string;
+  source_url?: string;
   created_at: string;
 }
 
@@ -127,9 +143,40 @@ export interface AuditLog {
   action: string;
   target_table: string;
   details: string;
-  ip_address: string;
-  device_info: string;
+  ip_address: string | null;
+  device_info: string | null;
   created_at: string;
+}
+
+export interface UserNotification {
+  id: string;
+  title: string;
+  message: string;
+  recommendation_id: string | null;
+  read_at: string | null;
+  created_at: string;
+}
+
+export interface PublicAboutData {
+  researchers: Array<{ id: string; name: string; role: string }>;
+  stats: Array<{ value: number; label: string }>;
+}
+
+export interface StoredWeatherSnapshot {
+  location: string;
+  temperature_c: number;
+  humidity_percent: number | null;
+  rainfall_probability_percent: number | null;
+  wind_kph: number | null;
+  condition_label: string;
+  observed_at: string;
+}
+
+export interface UserPreferences {
+  default_farm_id: string | null;
+  units: "metric" | "imperial";
+  notify_weather: boolean;
+  notify_recommendations: boolean;
 }
 
 export interface ImageObservations {
@@ -246,183 +293,384 @@ export interface CropAdvisorAnalysis {
   created_at: string;
 }
 
-// Fallback In-Memory Seed Store
-const mockCropAdvisorAnalyses: CropAdvisorAnalysis[] = [];
-
-const mockFarms: Farm[] = [
-  { id: "f-1", user_id: "demo-user-1", name: "Green Valley Estate", location: "Central Valley, Sector 4", soil_type: "Loam", total_area: 14.5, created_at: "2026-01-15T08:00:00Z", field_count: 3 },
-  { id: "f-2", user_id: "demo-user-1", name: "Sunburst Plantation", location: "Eastern Ridge, Zone B", soil_type: "Clay Loam", total_area: 28.0, created_at: "2026-02-10T10:30:00Z", field_count: 2 },
-  { id: "f-3", user_id: "demo-user-1", name: "Highland Terrace Parcel", location: "Northern Plateau", soil_type: "Sandy Loam", total_area: 9.2, created_at: "2026-03-01T14:15:00Z", field_count: 1 },
-];
-
-const mockFields: Field[] = [
-  { id: "fld-1", farm_id: "f-1", farm_name: "Green Valley Estate", name: "North Maize Plot", area: 5.5, current_crop_id: "c-1", crop_name: "Maize (Corn)", planting_date: "2026-05-12", soil_ph: 6.2, organic_matter: 3.1, water_source: "Drip Irrigation", is_harvested: false, created_at: "2026-05-12T09:00:00Z" },
-  { id: "fld-2", farm_id: "f-1", farm_name: "Green Valley Estate", name: "Paddy Field A1", area: 4.0, current_crop_id: "c-2", crop_name: "Rice (Paddy)", planting_date: "2026-06-01", soil_ph: 5.8, organic_matter: 4.0, water_source: "Canal System", is_harvested: false, created_at: "2026-06-01T08:30:00Z" },
-  { id: "fld-3", farm_id: "f-1", farm_name: "Green Valley Estate", name: "Legacy Wheat Field", area: 5.0, current_crop_id: "c-3", crop_name: "Wheat", planting_date: "2025-11-10", soil_ph: 6.8, organic_matter: 2.8, water_source: "Rainfed", is_harvested: true, created_at: "2025-11-10T07:45:00Z" },
-  { id: "fld-4", farm_id: "f-2", farm_name: "Sunburst Plantation", name: "Soybean Basin", area: 18.0, current_crop_id: "c-4", crop_name: "Soybean", planting_date: "2026-04-20", soil_ph: 6.5, organic_matter: 3.5, water_source: "Borehole / Well", is_harvested: false, created_at: "2026-04-20T11:00:00Z" },
-  { id: "fld-5", farm_id: "f-2", farm_name: "Sunburst Plantation", name: "Cassava Sector B", area: 10.0, current_crop_id: "c-5", crop_name: "Cassava", planting_date: "2026-02-15", soil_ph: 5.5, organic_matter: 2.2, water_source: "Rainfed", is_harvested: false, created_at: "2026-02-15T10:00:00Z" },
-];
-
-const mockCrops: Crop[] = [
-  { id: "c-1", name: "Maize (Corn)", ideal_ph_min: 5.8, ideal_ph_max: 7.0, water_requirement: "500 - 800 mm", growth_days: 110, climate: "Warm Subtropical / Tropical", companion_crops: "Beans, Squash, Cowpeas", season: "Wet Season" },
-  { id: "c-2", name: "Rice (Paddy)", ideal_ph_min: 5.5, ideal_ph_max: 6.8, water_requirement: "1200 - 1600 mm", growth_days: 130, climate: "Humid Tropical", companion_crops: "Duckweed, Azolla, Fish co-culture", season: "Wet Season" },
-  { id: "c-3", name: "Wheat", ideal_ph_min: 6.0, ideal_ph_max: 7.2, water_requirement: "450 - 650 mm", growth_days: 120, climate: "Cool Temperate / Subtropical", companion_crops: "Clover, Peas", season: "Dry / Cool Season" },
-  { id: "c-4", name: "Soybean", ideal_ph_min: 6.0, ideal_ph_max: 7.0, water_requirement: "450 - 700 mm", growth_days: 100, climate: "Warm Temperate / Tropical", companion_crops: "Corn, Sorghum", season: "Wet Season" },
-  { id: "c-5", name: "Cassava", ideal_ph_min: 5.5, ideal_ph_max: 6.5, water_requirement: "300 - 500 mm", growth_days: 270, climate: "Hot Tropical", companion_crops: "Peanuts, Melon, Cowpeas", season: "Year-Round" },
-  { id: "c-6", name: "Tomato", ideal_ph_min: 6.0, ideal_ph_max: 6.8, water_requirement: "400 - 600 mm", growth_days: 85, climate: "Warm Subtropical", companion_crops: "Basil, Marigold, Onions", season: "Dry / Controlled" },
-];
-
-const mockPests: PestDisease[] = [
-  { id: "p-1", crop_id: "c-1", crop_name: "Maize (Corn)", name: "Fall Armyworm (Spodoptera frugiperda)", type: "insect", symptoms: "Ragged holes in leaves, whorl damage, sawdust-like frass on stems and ears.", prevention: "Early planting, crop rotation with non-host leguminous crops, neem oil spray.", treatment: "Biological control using Trichogramma wasps, Bacillus thuringiensis (Bt), or targeted Emamectin Benzoate." },
-  { id: "p-2", crop_id: "c-2", crop_name: "Rice (Paddy)", name: "Rice Blast (Magnaporthe oryzae)", type: "fungus", symptoms: "Spindle-shaped lesions on leaves with gray centers and reddish-brown borders; neck rot.", prevention: "Avoid excessive Nitrogen fertilization, maintain 5-10cm standing water depth, use resistant varieties.", treatment: "Apply Tricyclazole or Azoxystrobin fungicide upon early symptom spotting." },
-  { id: "p-3", crop_id: "c-6", crop_name: "Tomato", name: "Bacterial Wilt (Ralstonia solanacearum)", type: "bacterial", symptoms: "Rapid wilting of green leaves during hot sunny days without initial leaf yellowing.", prevention: "Solarize soil prior to planting, maintain pH > 6.5, practice 4-year crop rotation.", treatment: "No chemical cure; rogue out infected plants immediately and drench surrounding soil with Copper Hydroxide." },
-  { id: "p-4", crop_id: "c-4", crop_name: "Soybean", name: "Soybean Rust (Phakopsora pachyrhizi)", type: "fungus", symptoms: "Tan to reddish-brown lesions on leaf undersides with small powdery pustules.", prevention: "Plant early maturing varieties, inspect lower canopy regularly during flowering.", treatment: "Foliar application of Triazole + Strobilurin fungicide combinations at first sign." },
-];
-
-const mockArticles: Article[] = [
-  { id: "a-1", author_id: "u-res-1", author_name: "Dr. Elena Rostova (Agronomist)", title: "Integrated Pest Management Strategies for Fall Armyworm", category: "Pest Management", summary: "A comprehensive guide on non-chemical and targeted biological controls for controlling armyworm outbreaks in cereal crops.", body: "### Introduction\nFall Armyworm (*Spodoptera frugiperda*) poses a severe threat to cereal crops across tropical regions...\n\n### Prevention Techniques\n1. Intercropping with desmodium (push-pull strategy).\n2. Regular scouting every 3 days during seedling growth.\n3. Application of neem oil extracts.\n\n### Targeted Chemical Controls\nUse selective bio-insecticides like Bacillus thuringiensis to minimize impact on beneficial predatory insects.", created_at: "2026-04-10T11:00:00Z" },
-  { id: "a-2", author_id: "u-res-2", author_name: "Prof. Marcus Thorne", title: "Optimizing Soil Organic Matter and N-P-K Utilization", category: "Soil Health", summary: "Learn how organic matter percentages directly alter N-P-K absorption efficiency and soil water retention.", body: "### Soil Health Mechanics\nOrganic matter serves as a nutrient buffer and water reservoir...\n\n### Application Steps\n- Incorporate crop residues after harvest.\n- Utilize cover cropping with legumes during fallow periods.\n- Test soil pH biannually.", created_at: "2026-05-18T14:30:00Z" },
-  { id: "a-3", author_id: "u-res-1", author_name: "Dr. Elena Rostova (Agronomist)", title: "Precision Drip Irrigation Scheduling for High-Yield Crops", category: "Irrigation", summary: "Key water management protocols tailored to crop growth stages to reduce water waste by up to 40%.", body: "### Water Requirement Mapping\nCrops demand varying moisture volumes at different phenological stages...\n\n- Seedling stage: Light, frequent applications.\n- Vegetative stage: Deeper root zone wetting.\n- Flowering/Fruiting stage: Peak water demand window.", created_at: "2026-06-02T09:15:00Z" },
-];
-
-const mockRecommendations: Recommendation[] = [
-  { id: "rec-1", user_id: "demo-user-1", field_id: "fld-1", field_name: "North Maize Plot", crop_name: "Maize (Corn)", type: "fertilizer", rule_applied: "Maize Vegetative Stage High-N Protocol", output_text: "Fertilizer Plan: Apply 120 kg/ha Urea (46-0-0) in two split doses during knee-high stage. Supplement with 50 kg/ha MOP (0-0-60) to strengthen stem vigor.", crop_stage: "Vegetative", rainfall_recent: "Moderate (25-50mm)", observed_issues: "Leaf Yellowing (N-deficiency)", created_at: "2026-06-10T14:20:00Z" },
-  { id: "rec-2", user_id: "demo-user-1", field_id: "fld-2", field_name: "Paddy Field A1", crop_name: "Rice (Paddy)", type: "irrigation", rule_applied: "Saturated Soil Moisture Trigger Rule", output_text: "Irrigation Schedule: Maintain 5cm continuous water layer until 10 days before harvest. Increase drainage during tiller production to stimulate root growth.", crop_stage: "Vegetative", rainfall_recent: "Heavy (>50mm)", observed_issues: "None", created_at: "2026-06-12T16:45:00Z" },
-];
-
-const mockConsultations: Consultation[] = [];
-
-const mockPublications: ResearchPublication[] = [
-  { id: "pub-1", researcher_id: "u-res-1", researcher_name: "Dr. Elena Rostova", title: "Comparative Analysis of Bio-Fertilization in Tropical Maize Cultivation", abstract: "This study evaluates the yield impact of combining Azospirillum inoculants with standard N-P-K application across 12 field trials. Results indicate a 14.2% increase in grain mass alongside a 20% reduction in synthetic Nitrogen requirements.", pdf_url: "#", crop_type: "Maize (Corn)", soil_type: "Loam / Clay Loam", publication_date: "2026-03-15", created_at: "2026-03-15T00:00:00Z" },
-  { id: "pub-2", researcher_id: "u-res-2", researcher_name: "Prof. Marcus Thorne", title: "Soil pH Remediation via Biochar and Agricultural Lime in Acidic Fields", abstract: "Field investigations into long-term soil buffering capacity using calcitic limestone vs hardwood biochar. Soil pH increased from 5.1 to 6.4 over a 6-month growth window, boosting phosphorus bioavailability.", pdf_url: "#", crop_type: "All / Cereal Crops", soil_type: "Acidic Clay", publication_date: "2026-04-28", created_at: "2026-04-28T00:00:00Z" },
-];
-
-const mockAuditLogs: AuditLog[] = [
-  { id: "aud-2", user_id: "u-res-1", user_name: "Dr. Elena Rostova", user_email: "researcher@agrikms.org", action: "Published Research Paper", target_table: "research_publications", details: "Published 'Comparative Analysis of Bio-Fertilization'", ip_address: "10.0.0.12", device_info: "Safari / macOS", created_at: "2026-06-12T11:40:00Z" },
-  { id: "aud-4", user_id: "admin-1", user_name: "Admin System Governance", user_email: "admin@agrikms.org", action: "Updated Account Status", target_table: "users", details: "Changed user status to Active for researcher@agrikms.org", ip_address: "127.0.0.1", device_info: "Edge / Windows", created_at: "2026-06-05T14:00:00Z" },
-];
-
 export async function getFarms(userId: string): Promise<Farm[]> {
   const db = getDb();
-  if (db) {
-    try {
-      const [rows] = await db.query(
-        `SELECT f.id, f.owner_id as user_id, f.name, f.location_id as location, 
-                COALESCE(f.soil_type, 'Loam') as soil_type, COALESCE(f.total_area, 0) as total_area, 
-                f.created_at, COUNT(fl.id) as field_count 
-         FROM farms f 
-         LEFT JOIN fields fl ON fl.farm_id = f.id 
-         WHERE f.owner_id = ? 
-         GROUP BY f.id 
-         ORDER BY f.created_at DESC`,
+  const where = userId === "admin" ? "" : "WHERE f.owner_id = ?";
+  const [rows] = userId === "admin"
+    ? await db.query(
+        `SELECT f.id, f.owner_id AS user_id, f.name, COALESCE(l.name, '') AS location,
+                COALESCE(f.soil_type, '') AS soil_type, COALESCE(f.total_area, 0) AS total_area,
+                f.created_at, COUNT(fl.id) AS field_count
+         FROM farms f
+         LEFT JOIN locations l ON l.id = f.location_id
+         LEFT JOIN fields fl ON fl.farm_id = f.id
+         GROUP BY f.id, l.name
+         ORDER BY f.created_at DESC`
+      )
+    : await db.query(
+    `SELECT f.id, f.owner_id AS user_id, f.name, COALESCE(l.name, '') AS location,
+            COALESCE(f.soil_type, '') AS soil_type, COALESCE(f.total_area, 0) AS total_area,
+            f.created_at, COUNT(fl.id) AS field_count
+     FROM farms f
+     LEFT JOIN locations l ON l.id = f.location_id
+     LEFT JOIN fields fl ON fl.farm_id = f.id
+     ${where}
+     GROUP BY f.id, l.name
+     ORDER BY f.created_at DESC`,
         [userId]
       );
-      if (Array.isArray(rows) && rows.length > 0) return rows as Farm[];
-    } catch {
-      // Fallback if schema/table not migrated yet
-    }
-  }
-  return mockFarms;
+  return (rows as Array<Record<string, unknown>>).map((row) => ({
+    id: String(row.id),
+    user_id: String(row.user_id),
+    name: String(row.name),
+    location: String(row.location),
+    soil_type: String(row.soil_type),
+    total_area: Number(row.total_area),
+    created_at: String(row.created_at),
+    field_count: Number(row.field_count),
+  }));
 }
 
 export async function createFarm(userId: string, farm: { name: string; location: string; soil_type: string; total_area: number }): Promise<Farm> {
   const db = getDb();
-  const id = `f-${randomUUID().slice(0, 8)}`;
-  const newFarm: Farm = { id, user_id: userId, name: farm.name, location: farm.location, soil_type: farm.soil_type, total_area: farm.total_area, created_at: new Date().toISOString(), field_count: 0 };
-  
-  if (db) {
-    try {
-      await db.query("INSERT INTO farms (id, owner_id, name, soil_type, total_area) VALUES (?, ?, ?, ?, ?)", [id, userId, farm.name, farm.soil_type, farm.total_area]);
-    } catch {
-      // continue with local store insert
-    }
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [locationResult] = await connection.execute(
+      "INSERT INTO locations (user_id, name) VALUES (?, ?)",
+      [userId, farm.location || null]
+    );
+    const locationId = (locationResult as { insertId: number }).insertId;
+    const [farmResult] = await connection.execute(
+      "INSERT INTO farms (owner_id, name, location_id, soil_type, total_area) VALUES (?, ?, ?, ?, ?)",
+      [userId, farm.name, locationId, farm.soil_type || null, farm.total_area]
+    );
+    await connection.commit();
+    const newFarm: Farm = {
+      id: String((farmResult as { insertId: number }).insertId),
+      user_id: userId,
+      name: farm.name,
+      location: farm.location,
+      soil_type: farm.soil_type,
+      total_area: farm.total_area,
+      created_at: new Date().toISOString(),
+      field_count: 0,
+    };
+    await addAuditLog(userId, "Created Farm Parcel", "farms", `Created ${farm.name} (${farm.total_area} ha)`);
+    return newFarm;
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
   }
-  mockFarms.unshift(newFarm);
-  addAuditLog(userId, "Created Farm Parcel", "farms", `Created ${farm.name} (${farm.total_area} ha)`);
-  return newFarm;
 }
 
-export async function getFields(userId?: string): Promise<Field[]> {
+export async function updateFarm(
+  userId: string,
+  farmId: string,
+  farm: { name: string; location: string; soil_type: string; total_area: number }
+): Promise<boolean> {
   const db = getDb();
-  if (db) {
-    try {
-      const [rows] = await db.query(
-        `SELECT fl.id, fl.farm_id, f.name as farm_name, fl.name, fl.area_hectares as area, 
-                fl.current_crop_id, c.name as crop_name, fl.planting_date, 
-                COALESCE(fl.soil_ph, 6.5) as soil_ph, COALESCE(fl.organic_matter, 2.5) as organic_matter, 
-                COALESCE(fl.water_source, 'Rainfed') as water_source, COALESCE(fl.is_harvested, 0) as is_harvested, 
-                fl.created_at 
-         FROM fields fl 
-         JOIN farms f ON f.id = fl.farm_id 
-         LEFT JOIN crops c ON c.id = fl.current_crop_id 
-         ORDER BY fl.created_at DESC`
-      );
-      if (Array.isArray(rows) && rows.length > 0) {
-        return (rows as Array<Record<string, unknown>>).map(r => ({
-          ...r,
-          is_harvested: Boolean(r.is_harvested)
-        })) as Field[];
-      }
-    } catch {
-      // Fallback
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [rows] = await connection.query(
+      "SELECT location_id, total_area FROM farms WHERE id = ? AND owner_id = ? FOR UPDATE",
+      [farmId, userId]
+    );
+    const existing = (rows as Array<{ location_id: number | null; total_area: number }>)[0];
+    if (!existing) {
+      await connection.rollback();
+      return false;
     }
+    const [fieldRows] = await connection.query(
+      "SELECT COALESCE(SUM(area_hectares), 0) AS field_area FROM fields WHERE farm_id = ?",
+      [farmId]
+    );
+    const fieldArea = Number((fieldRows as Array<{ field_area: number }>)[0]?.field_area ?? 0);
+    if (fieldArea > farm.total_area) {
+      throw new Error("Farm area cannot be smaller than the combined area of its fields.");
+    }
+
+    let locationId = existing.location_id;
+    if (locationId) {
+      await connection.execute(
+        "UPDATE locations SET name = ? WHERE id = ? AND user_id = ?",
+        [farm.location, locationId, userId]
+      );
+    } else {
+      const [locationResult] = await connection.execute(
+        "INSERT INTO locations (user_id, name) VALUES (?, ?)",
+        [userId, farm.location]
+      );
+      locationId = (locationResult as { insertId: number }).insertId;
+    }
+    await connection.execute(
+      "UPDATE farms SET name = ?, location_id = ?, soil_type = ?, total_area = ? WHERE id = ? AND owner_id = ?",
+      [farm.name, locationId, farm.soil_type || null, farm.total_area, farmId, userId]
+    );
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
   }
-  return mockFields;
+  await addAuditLog(userId, "Updated Farm Parcel", "farms", `Updated farm '${farm.name}' (${farm.total_area} ha)`);
+  return true;
+}
+
+export async function deleteFarm(userId: string, farmId: string): Promise<boolean> {
+  const [result] = await getDb().execute(
+    "DELETE FROM farms WHERE id = ? AND owner_id = ?",
+    [farmId, userId]
+  );
+  if (!(result as { affectedRows: number }).affectedRows) return false;
+  await addAuditLog(userId, "Deleted Farm Parcel", "farms", `Deleted farm parcel '${farmId}'`);
+  return true;
+}
+
+export async function getFields(userId: string): Promise<Field[]> {
+  const db = getDb();
+  const [rows] = await db.query(
+    `SELECT fl.id, fl.farm_id, f.name AS farm_name, fl.name, fl.area_hectares AS area,
+            fl.current_crop_id, COALESCE(fl.crop_name, c.name) AS crop_name,
+            c.ideal_ph_min AS crop_ideal_ph_min, c.ideal_ph_max AS crop_ideal_ph_max,
+            c.water_requirement AS crop_water_requirement,
+            DATE_FORMAT(fl.planting_date, '%Y-%m-%d') AS planting_date,
+            fl.soil_ph, fl.organic_matter, fl.water_source, fl.is_harvested, fl.created_at
+     FROM fields fl
+     JOIN farms f ON f.id = fl.farm_id
+     LEFT JOIN crops c ON c.id = fl.current_crop_id
+     WHERE f.owner_id = ?
+     ORDER BY fl.created_at DESC`,
+    [userId]
+  );
+  return (rows as Array<Record<string, unknown>>).map((row) => ({
+    id: String(row.id),
+    farm_id: String(row.farm_id),
+    farm_name: String(row.farm_name),
+    name: String(row.name),
+    area: Number(row.area),
+    current_crop_id: row.current_crop_id === null ? null : String(row.current_crop_id),
+    crop_name: row.crop_name ? String(row.crop_name) : undefined,
+    crop_ideal_ph_min: row.crop_ideal_ph_min === null ? undefined : Number(row.crop_ideal_ph_min),
+    crop_ideal_ph_max: row.crop_ideal_ph_max === null ? undefined : Number(row.crop_ideal_ph_max),
+    crop_water_requirement: row.crop_water_requirement ? String(row.crop_water_requirement) : undefined,
+    planting_date: row.planting_date ? String(row.planting_date).slice(0, 10) : "",
+    soil_ph: Number(row.soil_ph),
+    organic_matter: Number(row.organic_matter),
+    water_source: String(row.water_source),
+    is_harvested: Boolean(row.is_harvested),
+    created_at: String(row.created_at),
+  }));
+}
+
+export async function updateField(
+  userId: string,
+  fieldId: string,
+  data: { name: string; area: number; current_crop_id?: string | null; crop_name?: string; planting_date: string; soil_ph: number; organic_matter: number; water_source: string }
+): Promise<boolean> {
+  const db = getDb();
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [rows] = await connection.query(
+      `SELECT fl.farm_id, f.total_area
+       FROM fields fl JOIN farms f ON f.id = fl.farm_id
+       WHERE fl.id = ? AND f.owner_id = ? FOR UPDATE`,
+      [fieldId, userId]
+    );
+    const existing = (rows as Array<{ farm_id: number; total_area: number }>)[0];
+    if (!existing) {
+      await connection.rollback();
+      return false;
+    }
+    const [areaRows] = await connection.query(
+      "SELECT COALESCE(SUM(area_hectares), 0) AS field_area FROM fields WHERE farm_id = ? AND id <> ?",
+      [existing.farm_id, fieldId]
+    );
+    const otherFieldArea = Number((areaRows as Array<{ field_area: number }>)[0]?.field_area ?? 0);
+    if (otherFieldArea + data.area > Number(existing.total_area)) {
+      throw new Error("Combined field area cannot exceed the farm's total area.");
+    }
+    await connection.execute(
+      `UPDATE fields
+       SET name = ?, area_hectares = ?, current_crop_id = ?, crop_name = ?,
+           planting_date = ?, soil_ph = ?, organic_matter = ?, water_source = ?
+       WHERE id = ?`,
+      [
+        data.name,
+        data.area,
+        data.current_crop_id || null,
+        data.crop_name || null,
+        data.planting_date,
+        data.soil_ph,
+        data.organic_matter,
+        data.water_source,
+        fieldId,
+      ]
+    );
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+  await addAuditLog(userId, "Updated Field Plot", "fields", `Updated field '${data.name}' (${data.area} ha)`);
+  return true;
+}
+
+export async function deleteField(userId: string, fieldId: string): Promise<boolean> {
+  const [result] = await getDb().execute(
+    `DELETE fl FROM fields fl
+     JOIN farms f ON f.id = fl.farm_id
+     WHERE fl.id = ? AND f.owner_id = ?`,
+    [fieldId, userId]
+  );
+  if (!(result as { affectedRows: number }).affectedRows) return false;
+  await addAuditLog(userId, "Deleted Field Plot", "fields", `Deleted field plot '${fieldId}'`);
+  return true;
 }
 
 export async function createField(userId: string, data: { farm_id: string; name: string; area: number; current_crop_id?: string; crop_name?: string; planting_date: string; soil_ph: number; organic_matter: number; water_source: string }): Promise<Field> {
   const db = getDb();
-  const id = `fld-${randomUUID().slice(0, 8)}`;
-  const farm = mockFarms.find(f => f.id === data.farm_id) || { name: "Registered Farm" };
-  const crop = mockCrops.find(c => c.id === data.current_crop_id) || { name: data.crop_name || "Custom Crop" };
-
-  const newField: Field = {
-    id,
+  const connection = await db.getConnection();
+  let farmName = "";
+  let fieldId = "";
+  try {
+    await connection.beginTransaction();
+    const [farmRows] = await connection.query(
+      "SELECT name, total_area FROM farms WHERE id = ? AND owner_id = ? FOR UPDATE",
+      [data.farm_id, userId]
+    );
+    const farm = (farmRows as Array<{ name: string; total_area: number }>)[0];
+    if (!farm) throw new Error("Farm parcel not found.");
+    const [areaRows] = await connection.query(
+      "SELECT COALESCE(SUM(area_hectares), 0) AS field_area FROM fields WHERE farm_id = ?",
+      [data.farm_id]
+    );
+    const existingFieldArea = Number((areaRows as Array<{ field_area: number }>)[0]?.field_area ?? 0);
+    if (existingFieldArea + data.area > Number(farm.total_area)) {
+      throw new Error("Combined field area cannot exceed the farm's total area.");
+    }
+    const [result] = await connection.execute(
+      `INSERT INTO fields (farm_id, name, area_hectares, current_crop_id, crop_name, planting_date, soil_ph, organic_matter, water_source)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [data.farm_id, data.name, data.area, data.current_crop_id || null, data.crop_name || null, data.planting_date, data.soil_ph, data.organic_matter, data.water_source]
+    );
+    farmName = farm.name;
+    fieldId = String((result as { insertId: number }).insertId);
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+  let cropName: string | undefined;
+  if (data.current_crop_id) {
+    const [cropRows] = await db.query("SELECT name FROM crops WHERE id = ? LIMIT 1", [data.current_crop_id]);
+    cropName = (cropRows as Array<{ name: string }>)[0]?.name;
+  }
+  const createdAt = new Date().toISOString();
+  const field: Field = {
+    id: fieldId,
     farm_id: data.farm_id,
-    farm_name: farm.name,
+    farm_name: farmName,
     name: data.name,
     area: data.area,
     current_crop_id: data.current_crop_id || null,
-    crop_name: crop.name,
+    crop_name: data.crop_name || cropName,
     planting_date: data.planting_date,
     soil_ph: data.soil_ph,
     organic_matter: data.organic_matter,
     water_source: data.water_source,
     is_harvested: false,
-    created_at: new Date().toISOString()
+    created_at: createdAt,
   };
-
-  if (db) {
-    try {
-      await db.query(
-        `INSERT INTO fields (id, farm_id, name, area_hectares, current_crop_id, planting_date, soil_ph, organic_matter, water_source) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [id, data.farm_id, data.name, data.area, data.current_crop_id || null, data.planting_date, data.soil_ph, data.organic_matter, data.water_source]
-      );
-    } catch {
-      // ignore
-    }
-  }
-  mockFields.unshift(newField);
-  addAuditLog(userId, "Created Field Plot", "fields", `Added field '${data.name}' (${data.area} ha) under ${farm.name}`);
-  return newField;
+  await addAuditLog(userId, "Created Field Plot", "fields", `Added field '${data.name}' (${data.area} ha) under ${farmName}`);
+  return field;
 }
 
 export async function toggleFieldHarvest(userId: string, fieldId: string): Promise<Field | null> {
-  const field = mockFields.find(f => f.id === fieldId);
-  if (!field) return null;
-  field.is_harvested = !field.is_harvested;
-
   const db = getDb();
-  if (db) {
-    try {
-      await db.query("UPDATE fields SET is_harvested = ? WHERE id = ?", [field.is_harvested ? 1 : 0, fieldId]);
-    } catch {
-      // fallback
-    }
-  }
-  addAuditLog(userId, "Toggled Field Harvest Status", "fields", `Field '${field.name}' marked as ${field.is_harvested ? 'Harvested' : 'Active'}`);
+  const [result] = await db.execute(
+    `UPDATE fields fl JOIN farms f ON f.id = fl.farm_id
+     SET fl.is_harvested = NOT fl.is_harvested
+     WHERE fl.id = ? AND f.owner_id = ?`,
+    [fieldId, userId]
+  );
+  if (!(result as { affectedRows: number }).affectedRows) return null;
+  const field = (await getFields(userId)).find((item) => item.id === fieldId);
+  if (!field) return null;
+  await addAuditLog(userId, "Toggled Field Harvest Status", "fields", `Field '${field.name}' marked as ${field.is_harvested ? "Harvested" : "Active"}`);
   return field;
+}
+
+export async function updateUserProfile(
+  userId: string,
+  data: { name: string; address: string }
+): Promise<boolean> {
+  const connection = await getDb().getConnection();
+  try {
+    await connection.beginTransaction();
+    const [rows] = await connection.query(
+      "SELECT id FROM users WHERE id = ? AND status = 'active' FOR UPDATE",
+      [userId]
+    );
+    if (!(rows as Array<{ id: string }>).length) {
+      await connection.rollback();
+      return false;
+    }
+    await connection.execute(
+      "UPDATE users SET name = ?, address = ? WHERE id = ?",
+      [data.name, data.address || null, userId]
+    );
+    await connection.execute(
+      "INSERT INTO audit_logs (user_id, action, target_table, details) VALUES (?, ?, ?, ?)",
+      [userId, "Updated Account Profile", "users", "Updated account name or address"]
+    );
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+  return true;
+}
+
+export async function updateUserPassword(userId: string, passwordHash: string): Promise<boolean> {
+  const connection = await getDb().getConnection();
+  try {
+    await connection.beginTransaction();
+    const [rows] = await connection.query(
+      "SELECT id FROM users WHERE id = ? AND status = 'active' FOR UPDATE",
+      [userId]
+    );
+    if (!(rows as Array<{ id: string }>).length) {
+      await connection.rollback();
+      return false;
+    }
+    await connection.execute(
+      "UPDATE users SET password_hash = ? WHERE id = ?",
+      [passwordHash, userId]
+    );
+    await connection.execute(
+      "INSERT INTO audit_logs (user_id, action, target_table, details) VALUES (?, ?, ?, ?)",
+      [userId, "Changed Account Password", "users", "Updated account password"]
+    );
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+  return true;
 }
 
 export interface UserRecord {
@@ -430,172 +678,174 @@ export interface UserRecord {
   name: string;
   email: string;
   role: "farmer" | "researcher" | "admin";
-  status: "active" | "suspended";
+  status: UserAccountStatus;
   password_hash: string;
   address?: string;
   created_at: string;
 }
 
-const mockUsers: UserRecord[] = [
-  {
-    id: "u-farmer-1",
-    name: "Frank Farmer",
-    email: "farmer@agrikms.org",
-    role: "farmer",
-    status: "active",
-    password_hash: "d4128525b6a7a13c328e1d51a6fb2b23:8d50694bf4f73aa8b8577ae74d1a084fffa3fbe59942a7eb6d9cfbd9dd43ceba0c9b0e1a129d4791a89c927f8a7e0d37e4be63cf6bc9dcf8bc1e61bbddff42eb",
-    address: "Green Valley Farm, Sector 4",
-    created_at: "2026-01-10T08:00:00Z",
-  },
-  {
-    id: "u-res-1",
-    name: "Dr. Elena Rostova",
-    email: "researcher@agrikms.org",
-    role: "researcher",
-    status: "active",
-    password_hash: "d4128525b6a7a13c328e1d51a6fb2b23:8d50694bf4f73aa8b8577ae74d1a084fffa3fbe59942a7eb6d9cfbd9dd43ceba0c9b0e1a129d4791a89c927f8a7e0d37e4be63cf6bc9dcf8bc1e61bbddff42eb",
-    address: "Agricultural Research Station, Zone B",
-    created_at: "2026-01-12T09:30:00Z",
-  },
-  {
-    id: "u-admin-1",
-    name: "System Administrator",
-    email: "admin@agrikms.org",
-    role: "admin",
-    status: "active",
-    password_hash: "d4128525b6a7a13c328e1d51a6fb2b23:8d50694bf4f73aa8b8577ae74d1a084fffa3fbe59942a7eb6d9cfbd9dd43ceba0c9b0e1a129d4791a89c927f8a7e0d37e4be63cf6bc9dcf8bc1e61bbddff42eb",
-    address: "AgriKnow HQ",
-    created_at: "2026-01-01T00:00:00Z",
-  },
-];
+export type UserAccountStatus = "pending" | "active" | "suspended" | "rejected";
+export type UserAccountRole = "farmer" | "researcher" | "admin";
+
 
 export async function getCrops(): Promise<Crop[]> {
   const db = getDb();
-  if (db) {
-    try {
-      const [rows] = await db.query(
-        "SELECT id, name, season, ideal_ph_min, ideal_ph_max, water_requirement, growth_days, climate, companion_crops FROM crops ORDER BY created_at DESC"
-      );
-      if (Array.isArray(rows) && rows.length > 0) {
-        return (rows as Array<Record<string, unknown>>).map((r) => ({
-          ...r,
-          id: String(r.id),
-          ideal_ph_min: Number(r.ideal_ph_min || 6.0),
-          ideal_ph_max: Number(r.ideal_ph_max || 7.5),
-          growth_days: Number(r.growth_days || 90),
-        })) as Crop[];
-      }
-    } catch {
-      // fallback
-    }
-  }
-  return mockCrops;
+  const [rows] = await db.query(
+    `SELECT c.id, c.name, c.season, c.ideal_ph_min, c.ideal_ph_max, c.water_requirement, c.growth_days,
+            c.climate, c.companion_crops, c.category, c.type, c.stage, c.detail, c.soil,
+            cr.min_temperature AS minimum_temperature, cr.max_temperature AS maximum_temperature,
+            cr.min_rainfall AS minimum_rainfall, cr.max_rainfall AS maximum_rainfall,
+            cr.min_soil_temperature AS minimum_soil_temperature, cr.max_soil_temperature AS maximum_soil_temperature,
+            cr.min_soil_moisture AS minimum_soil_moisture, cr.max_soil_moisture AS maximum_soil_moisture,
+            cr.sunlight, cr.terrain
+     FROM crops c
+     LEFT JOIN crop_requirements cr ON cr.crop_id = c.id
+     ORDER BY c.created_at DESC`
+  );
+  return (rows as Array<Record<string, unknown>>).map((row) => ({
+    id: String(row.id),
+    name: String(row.name),
+    season: String(row.season || ""),
+    ideal_ph_min: Number(row.ideal_ph_min),
+    ideal_ph_max: Number(row.ideal_ph_max),
+    water_requirement: String(row.water_requirement || ""),
+    growth_days: Number(row.growth_days),
+    climate: String(row.climate || ""),
+    companion_crops: String(row.companion_crops || ""),
+    category: row.category ? String(row.category) : undefined,
+    type: row.type ? String(row.type) : undefined,
+    stage: row.stage ? String(row.stage) : undefined,
+    detail: row.detail ? String(row.detail) : undefined,
+    soil: row.soil ? String(row.soil) : undefined,
+    minimum_temperature: row.minimum_temperature === null ? null : Number(row.minimum_temperature),
+    maximum_temperature: row.maximum_temperature === null ? null : Number(row.maximum_temperature),
+    minimum_rainfall: row.minimum_rainfall === null ? null : Number(row.minimum_rainfall),
+    maximum_rainfall: row.maximum_rainfall === null ? null : Number(row.maximum_rainfall),
+    minimum_soil_temperature: row.minimum_soil_temperature === null ? null : Number(row.minimum_soil_temperature),
+    maximum_soil_temperature: row.maximum_soil_temperature === null ? null : Number(row.maximum_soil_temperature),
+    minimum_soil_moisture: row.minimum_soil_moisture === null ? null : Number(row.minimum_soil_moisture),
+    maximum_soil_moisture: row.maximum_soil_moisture === null ? null : Number(row.maximum_soil_moisture),
+    sunlight: row.sunlight ? String(row.sunlight) : undefined,
+    terrain: row.terrain ? String(row.terrain) : undefined,
+  }));
 }
 
 export async function createCrop(crop: Partial<Crop> & { name: string }): Promise<Crop> {
   const db = getDb();
-  const id = `c-${randomUUID().slice(0, 8)}`;
-  const newCrop: Crop = {
-    id,
+  const [result] = await db.execute(
+    `INSERT INTO crops (name, season, ideal_ph_min, ideal_ph_max, water_requirement, growth_days, climate, companion_crops, category, type, stage, detail, soil)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      crop.name,
+      crop.season ?? null,
+      crop.ideal_ph_min ?? null,
+      crop.ideal_ph_max ?? null,
+      crop.water_requirement ?? null,
+      crop.growth_days ?? null,
+      crop.climate ?? null,
+      crop.companion_crops ?? null,
+      crop.category ?? null,
+      crop.type ?? null,
+      crop.stage ?? null,
+      crop.detail ?? null,
+      crop.soil ?? null,
+    ]
+  );
+  return {
+    id: String((result as { insertId: number }).insertId),
     name: crop.name,
-    season: crop.season || "Wet Season",
-    ideal_ph_min: Number(crop.ideal_ph_min || 6.0),
-    ideal_ph_max: Number(crop.ideal_ph_max || 7.5),
-    water_requirement: crop.water_requirement || "400 - 600 mm",
-    growth_days: Number(crop.growth_days || 90),
-    climate: crop.climate || "Warm Subtropical",
-    companion_crops: crop.companion_crops || "Legumes, Basil",
+    season: crop.season || "",
+    ideal_ph_min: Number(crop.ideal_ph_min),
+    ideal_ph_max: Number(crop.ideal_ph_max),
+    water_requirement: crop.water_requirement || "",
+    growth_days: Number(crop.growth_days),
+    climate: crop.climate || "",
+    companion_crops: crop.companion_crops || "",
+    category: crop.category,
+    type: crop.type,
+    stage: crop.stage,
+    detail: crop.detail,
+    soil: crop.soil,
   };
-
-  if (db) {
-    try {
-      const [res] = await db.query(
-        `INSERT INTO crops (name, season, ideal_ph_min, ideal_ph_max, water_requirement, growth_days, climate, companion_crops) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [newCrop.name, newCrop.season, newCrop.ideal_ph_min, newCrop.ideal_ph_max, newCrop.water_requirement, newCrop.growth_days, newCrop.climate, newCrop.companion_crops]
-      );
-      if (res && "insertId" in res) {
-        newCrop.id = String((res as { insertId: number }).insertId);
-      }
-    } catch (err) {
-      console.warn("MySQL crop insert fallback:", err);
-    }
-  }
-
-  mockCrops.unshift(newCrop);
-  return newCrop;
 }
 
-export async function getUsersFromDbOrMemory(search = "", page = 1, pageSize = 10): Promise<{ users: Array<{ id: string; name: string; email: string; role: string; status: string; createdAt: string }>; total: number }> {
-  const db = getDb();
-  if (db) {
-    try {
-      const like = `%${search}%`;
-      const [countRows] = await db.query("SELECT COUNT(*) AS total FROM users WHERE name LIKE ? OR email LIKE ?", [like, like]);
-      const [dbUsers] = await db.query(
-        "SELECT id, name, email, role, status, created_at AS createdAt FROM users WHERE name LIKE ? OR email LIKE ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
-        [like, like, pageSize, (page - 1) * pageSize]
-      );
-      if (Array.isArray(dbUsers) && dbUsers.length > 0) {
-        const mapped = (dbUsers as Array<Record<string, unknown>>).map((u) => ({
-          id: String(u.id),
-          name: String(u.name),
-          email: String(u.email),
-          role: ["farmer", "researcher", "admin"].includes(String(u.role)) ? String(u.role) : "farmer",
-          status: String(u.status) === "suspended" ? "suspended" : "active",
-          createdAt: String(u.createdAt || new Date().toISOString()),
-        }));
-        return { users: mapped, total: Number((countRows as Array<{ total: number }>)[0]?.total ?? mapped.length) };
-      }
-    } catch (err) {
-      console.warn("MySQL users fetch fallback:", err);
-    }
-  }
+export async function deleteCrop(id: string): Promise<boolean> {
+  const [result] = await getDb().execute("DELETE FROM crops WHERE id = ?", [id]);
+  return (result as { affectedRows: number }).affectedRows > 0;
+}
 
-  const query = search.toLowerCase().trim();
-  const filtered = mockUsers.filter((u) => u.name.toLowerCase().includes(query) || u.email.toLowerCase().includes(query));
-  const start = (page - 1) * pageSize;
-  const paginated = filtered.slice(start, start + pageSize).map((u) => ({
-    id: u.id,
-    name: u.name,
-    email: u.email,
-    role: u.role,
-    status: u.status,
-    createdAt: u.created_at,
+export async function getUsers(
+  search = "",
+  page = 1,
+  pageSize = 10,
+  status?: UserAccountStatus,
+  role?: UserAccountRole
+): Promise<{ users: Array<{ id: string; name: string; email: string; address: string | null; role: UserAccountRole; status: UserAccountStatus; createdAt: string }>; total: number }> {
+  const db = getDb();
+  const like = `%${search}%`;
+  const conditions = ["(name LIKE ? OR email LIKE ?)"];
+  const values: Array<string | number> = [like, like];
+  if (status) {
+    conditions.push("status = ?");
+    values.push(status);
+  }
+  if (role) {
+    conditions.push("role = ?");
+    values.push(role);
+  }
+  const where = conditions.join(" AND ");
+  const [countRows] = await db.query(`SELECT COUNT(*) AS total FROM users WHERE ${where}`, values);
+  const [rows] = await db.query(
+    `SELECT id, name, email, address, role, status, created_at AS createdAt FROM users
+     WHERE ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+    [...values, pageSize, (page - 1) * pageSize]
+  );
+  const users = (rows as Array<Record<string, unknown>>).map((row) => ({
+    id: String(row.id),
+    name: String(row.name),
+    email: String(row.email),
+    address: row.address === null ? null : String(row.address),
+    role: ["farmer", "researcher", "admin"].includes(String(row.role))
+      ? (String(row.role) as UserAccountRole)
+      : "farmer",
+    status: ["pending", "active", "suspended", "rejected"].includes(String(row.status))
+      ? (String(row.status) as UserAccountStatus)
+      : "active",
+    createdAt: String(row.createdAt),
   }));
-  return { users: paginated, total: filtered.length };
+  return { users, total: Number((countRows as Array<{ total: number }>)[0]?.total ?? 0) };
 }
 
 export async function findUserByEmail(email: string): Promise<UserRecord | null> {
   const db = getDb();
   const cleanEmail = email.trim().toLowerCase();
   if (db) {
-    try {
-      const [rows] = await db.query(
-        "SELECT id, name, email, role, status, password_hash, address, created_at FROM users WHERE email = ? LIMIT 1",
-        [cleanEmail]
-      );
-      if (Array.isArray(rows) && rows.length > 0) {
-        const r = rows[0] as Record<string, unknown>;
-        const validRole = ["farmer", "researcher", "admin"].includes(String(r.role))
-          ? (String(r.role) as "farmer" | "researcher" | "admin")
-          : "farmer";
-        return {
-          id: String(r.id),
-          name: String(r.name),
-          email: String(r.email),
-          role: validRole,
-          status: String(r.status) === "suspended" ? "suspended" : "active",
-          password_hash: String(r.password_hash || ""),
-          address: r.address ? String(r.address) : "",
-          created_at: String(r.created_at || new Date().toISOString()),
-        };
-      }
-    } catch {
-      // fallback to mock
+    const [rows] = await db.query(
+      "SELECT id, name, email, role, status, password_hash, address, created_at FROM users WHERE email = ? LIMIT 1",
+      [cleanEmail]
+    );
+    if (Array.isArray(rows) && rows.length > 0) {
+      const r = rows[0] as Record<string, unknown>;
+      const validRole = ["farmer", "researcher", "admin"].includes(String(r.role))
+        ? (String(r.role) as "farmer" | "researcher" | "admin")
+        : "farmer";
+      return {
+        id: String(r.id),
+        name: String(r.name),
+        email: String(r.email),
+        role: validRole,
+        status: ["pending", "active", "suspended", "rejected"].includes(String(r.status))
+          ? (String(r.status) as UserAccountStatus)
+          : "active",
+        password_hash: String(r.password_hash || ""),
+        address: r.address ? String(r.address) : "",
+        created_at: String(r.created_at || new Date().toISOString()),
+      };
     }
+    return null;
   }
-  return mockUsers.find((u) => u.email.toLowerCase() === cleanEmail) || null;
+
+  return null;
 }
 
 export async function createUserRecord(user: Omit<UserRecord, "created_at">): Promise<UserRecord> {
@@ -606,102 +856,245 @@ export async function createUserRecord(user: Omit<UserRecord, "created_at">): Pr
 
   const db = getDb();
   if (db) {
-    try {
-      await db.execute(
-        "INSERT INTO users (id, name, email, role, status, password_hash, address) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        [user.id, user.name, user.email, user.role, user.status, user.password_hash, user.address || null]
-      );
-    } catch (err) {
-      console.warn("MySQL user insert fallback:", err);
-    }
+    await db.execute(
+      "INSERT INTO users (id, name, email, role, status, password_hash, address) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [user.id, user.name, user.email, user.role, user.status, user.password_hash, user.address || null]
+    );
+    return newRecord;
   }
 
-  const existingIdx = mockUsers.findIndex((u) => u.email === user.email);
-  if (existingIdx !== -1) {
-    mockUsers[existingIdx] = newRecord;
-  } else {
-    mockUsers.unshift(newRecord);
-  }
   return newRecord;
 }
 
 export async function updateUserRoleOrStatus(id: string, role?: string, status?: string): Promise<boolean> {
   const db = getDb();
-  if (db) {
-    try {
-      await db.execute("UPDATE users SET role = COALESCE(?, role), status = COALESCE(?, status) WHERE id = ?", [
-        role ?? null,
-        status ?? null,
-        id,
-      ]);
-    } catch (err) {
-      console.warn("MySQL user update fallback:", err);
-    }
-  }
-
-  const user = mockUsers.find((u) => u.id === id);
-  if (user) {
-    if (role && ["farmer", "researcher", "admin"].includes(role)) {
-      user.role = role as "farmer" | "researcher" | "admin";
-    }
-    if (status && ["active", "suspended"].includes(status)) {
-      user.status = status as "active" | "suspended";
-    }
-  }
-  return true;
+  const [result] = await db.execute("UPDATE users SET role = COALESCE(?, role), status = COALESCE(?, status) WHERE id = ?", [
+    role ?? null,
+    status ?? null,
+    id,
+  ]);
+  return (result as { affectedRows: number }).affectedRows > 0;
 }
 
 export async function deleteUserRecord(id: string): Promise<boolean> {
   const db = getDb();
-  if (db) {
-    try {
-      await db.execute("DELETE FROM users WHERE id = ?", [id]);
-    } catch (err) {
-      console.warn("MySQL user delete fallback:", err);
-    }
-  }
-
-  const idx = mockUsers.findIndex((u) => u.id === id);
-  if (idx !== -1) {
-    mockUsers.splice(idx, 1);
-  }
-  return true;
+  const [result] = await db.execute("DELETE FROM users WHERE id = ?", [id]);
+  return (result as { affectedRows: number }).affectedRows > 0;
 }
 
 
 export async function getPestsDiseases(): Promise<PestDisease[]> {
-  return mockPests;
+  const [rows] = await getDb().query(
+    `SELECT p.id, p.crop_id, c.name AS crop_name, p.name, p.type, p.symptoms, p.prevention, p.treatment
+     FROM pests_diseases p
+     LEFT JOIN crops c ON c.id = p.crop_id
+     ORDER BY p.created_at DESC`
+  );
+  return (rows as Array<Record<string, unknown>>).map((row) => ({
+    id: String(row.id),
+    crop_id: row.crop_id === null ? null : String(row.crop_id),
+    crop_name: row.crop_name ? String(row.crop_name) : undefined,
+    name: String(row.name),
+    type: String(row.type) as PestDisease["type"],
+    symptoms: String(row.symptoms),
+    prevention: String(row.prevention),
+    treatment: String(row.treatment),
+  }));
 }
 
 export async function getArticles(): Promise<Article[]> {
-  return mockArticles;
+  const [rows] = await getDb().query(
+    `SELECT a.id, a.author_id, u.name AS author_name, a.title, a.category, a.summary, a.body,
+            a.evidence_note, a.source_url,
+            COALESCE(a.published_at, a.created_at) AS created_at
+     FROM knowledge_articles a
+     LEFT JOIN users u ON u.id = a.author_id
+     ORDER BY COALESCE(a.published_at, a.created_at) DESC`
+  );
+  return (rows as Array<Record<string, unknown>>).map((row) => ({
+    id: String(row.id),
+    author_id: row.author_id ? String(row.author_id) : null,
+    author_name: row.author_name ? String(row.author_name) : undefined,
+    title: String(row.title),
+    category: String(row.category),
+    summary: String(row.summary),
+    body: String(row.body),
+    evidence_note: row.evidence_note ? String(row.evidence_note) : undefined,
+    source_url: row.source_url ? String(row.source_url) : undefined,
+    created_at: String(row.created_at),
+  }));
 }
 
 export async function getRecommendations(userId: string): Promise<Recommendation[]> {
-  return mockRecommendations.filter(r => r.user_id === userId || true);
+  const db = getDb();
+  const query = `SELECT r.id, r.user_id, r.field_id, f.name AS field_name, r.crop_id,
+                        COALESCE(c.name, '') AS crop_name, r.type, r.rule_applied, r.output_text,
+                        r.crop_stage, r.rainfall_recent, r.observed_issues, r.created_at
+                 FROM recommendations r
+                 LEFT JOIN fields f ON f.id = r.field_id
+                 LEFT JOIN crops c ON c.id = r.crop_id
+                 ${userId === "admin" ? "" : "WHERE r.user_id = ?"}
+                 ORDER BY r.created_at DESC`;
+  const [rows] = userId === "admin" ? await db.query(query) : await db.query(query, [userId]);
+  return (rows as Array<Record<string, unknown>>).map((row) => ({
+    id: String(row.id),
+    user_id: String(row.user_id),
+    field_id: row.field_id === null ? "" : String(row.field_id),
+    field_name: row.field_name ? String(row.field_name) : undefined,
+    crop_name: row.crop_name ? String(row.crop_name) : undefined,
+    type: String(row.type) as Recommendation["type"],
+    rule_applied: String(row.rule_applied || ""),
+    output_text: String(row.output_text || ""),
+    crop_stage: String(row.crop_stage || ""),
+    rainfall_recent: String(row.rainfall_recent || ""),
+    observed_issues: String(row.observed_issues || ""),
+    created_at: String(row.created_at),
+  }));
 }
 
 export async function saveRecommendation(userId: string, rec: Omit<Recommendation, "id" | "user_id" | "created_at">): Promise<Recommendation> {
-  const id = `rec-${randomUUID().slice(0, 8)}`;
   const cleanOutputText = rec.output_text ? rec.output_text.replace(/\*/g, "") : "";
+  const title = `${rec.type} recommendation for ${rec.crop_name || "field"}`;
+  const db = getDb();
+  const [fieldRows] = await db.query(
+    `SELECT f.current_crop_id
+     FROM fields f JOIN farms farm ON farm.id = f.farm_id
+     WHERE f.id = ? AND farm.owner_id = ? LIMIT 1`,
+    [rec.field_id || null, userId]
+  );
+  const field = (fieldRows as Array<{ current_crop_id: number | null }>)[0];
+  if (!field) throw new Error("Field parcel not found.");
+  const [result] = await db.execute(
+    `INSERT INTO recommendations
+       (user_id, field_id, crop_id, type, rule_applied, output_text, crop_stage, rainfall_recent, observed_issues, title, explanation)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      userId,
+      rec.field_id,
+      field.current_crop_id,
+      rec.type,
+      rec.rule_applied,
+      cleanOutputText,
+      rec.crop_stage,
+      rec.rainfall_recent,
+      rec.observed_issues,
+      title,
+      cleanOutputText,
+    ]
+  );
   const newRec: Recommendation = {
     ...rec,
     output_text: cleanOutputText,
-    id,
+    id: String((result as { insertId: number }).insertId),
     user_id: userId,
-    created_at: new Date().toISOString()
+    created_at: new Date().toISOString(),
   };
-  mockRecommendations.unshift(newRec);
-  addAuditLog(userId, "Generated Decision Support Advisory", "recommendations", `Generated ${rec.type} advice for field '${rec.field_name || rec.field_id}'`);
+  try {
+    await createNotification(
+      userId,
+      "Decision-support recommendation ready",
+      `Your ${rec.type} guidance for ${rec.field_name || "your field"} is ready to review.`,
+      newRec.id
+    );
+  } catch (error) {
+    console.error("Recommendation notification could not be saved:", error);
+  }
+  await addAuditLog(userId, "Generated Decision Support Advisory", "recommendations", `Generated ${rec.type} advice for field '${rec.field_name || rec.field_id}'`);
   return newRec;
 }
 
-export async function getConsultations(): Promise<Consultation[]> {
-  return mockConsultations;
+export async function getConsultations(userId: string, userRole: string): Promise<Consultation[]> {
+  const db = getDb();
+  const predicate = userRole === "admin" || userRole === "researcher" ? "" : "WHERE c.farmer_id = ?";
+  const [rows] = predicate
+    ? await db.query(
+        `SELECT c.id, c.farmer_id, farmer.name AS farmer_name, c.researcher_id, researcher.name AS researcher_name,
+                c.crop_name, c.subject, c.description, c.status, c.image_url, c.created_at,
+                reply.id AS reply_id, reply.sender_id, sender.name AS sender_name, sender.role AS sender_role,
+                reply.message, reply.created_at AS reply_created_at
+         FROM consultations c
+         JOIN users farmer ON farmer.id = c.farmer_id
+         LEFT JOIN users researcher ON researcher.id = c.researcher_id
+         LEFT JOIN consultation_replies reply ON reply.consultation_id = c.id
+         LEFT JOIN users sender ON sender.id = reply.sender_id
+         ${predicate}
+         ORDER BY c.created_at DESC, reply.created_at ASC`,
+        [userId]
+      )
+    : await db.query(
+        `SELECT c.id, c.farmer_id, farmer.name AS farmer_name, c.researcher_id, researcher.name AS researcher_name,
+                c.crop_name, c.subject, c.description, c.status, c.image_url, c.created_at,
+                reply.id AS reply_id, reply.sender_id, sender.name AS sender_name, sender.role AS sender_role,
+                reply.message, reply.created_at AS reply_created_at
+         FROM consultations c
+         JOIN users farmer ON farmer.id = c.farmer_id
+         LEFT JOIN users researcher ON researcher.id = c.researcher_id
+         LEFT JOIN consultation_replies reply ON reply.consultation_id = c.id
+         LEFT JOIN users sender ON sender.id = reply.sender_id
+         ORDER BY c.created_at DESC, reply.created_at ASC`
+      );
+  const consultations = new Map<string, Consultation>();
+  for (const raw of rows as Array<Record<string, unknown>>) {
+    const id = String(raw.id);
+    let consultation = consultations.get(id);
+    if (!consultation) {
+      consultation = {
+        id,
+        farmer_id: String(raw.farmer_id),
+        farmer_name: String(raw.farmer_name),
+        researcher_id: raw.researcher_id ? String(raw.researcher_id) : null,
+        researcher_name: raw.researcher_name ? String(raw.researcher_name) : undefined,
+        crop_name: String(raw.crop_name),
+        subject: String(raw.subject),
+        description: String(raw.description),
+        status: String(raw.status) as Consultation["status"],
+        image_url: raw.image_url ? String(raw.image_url) : undefined,
+        created_at: String(raw.created_at),
+        replies: [],
+      };
+      consultations.set(id, consultation);
+    }
+    if (raw.reply_id !== null) {
+      consultation.replies?.push({
+        id: String(raw.reply_id),
+        consultation_id: id,
+        sender_id: String(raw.sender_id),
+        sender_name: String(raw.sender_name),
+        sender_role: String(raw.sender_role),
+        message: String(raw.message),
+        created_at: String(raw.reply_created_at),
+      });
+    }
+  }
+  return [...consultations.values()];
 }
 
 export async function createConsultation(userId: string, userName: string, data: { crop_name: string; subject: string; description: string; image_url?: string }): Promise<Consultation> {
-  const id = `con-${randomUUID().slice(0, 8)}`;
+  const id = randomUUID();
+  const db = getDb();
+  await db.execute(
+    "INSERT INTO consultations (id, farmer_id, crop_name, subject, description, image_url) VALUES (?, ?, ?, ?, ?, ?)",
+    [id, userId, data.crop_name, data.subject, data.description, data.image_url || null]
+  );
+  try {
+    await db.execute(
+      `INSERT INTO notifications (user_id, title, message)
+       SELECT id, 'New farmer consultation', ?
+       FROM users WHERE role IN ('researcher', 'admin') AND status = 'active'`,
+      [`${userName} submitted a consultation: ${data.subject}`]
+    );
+  } catch (error) {
+    console.error("Researcher consultation notification could not be saved:", error);
+  }
+  try {
+    await createNotification(
+      userId,
+      "Consultation submitted",
+      `Your question about ${data.crop_name} has been sent to agricultural researchers.`
+    );
+  } catch (error) {
+    console.error("Farmer consultation confirmation could not be saved:", error);
+  }
   const newCon: Consultation = {
     id,
     farmer_id: userId,
@@ -713,153 +1106,399 @@ export async function createConsultation(userId: string, userName: string, data:
     status: "Pending Review",
     image_url: data.image_url,
     created_at: new Date().toISOString(),
-    replies: [
-      {
-        id: `rep-${randomUUID().slice(0, 8)}`,
-        consultation_id: id,
-        sender_id: userId,
-        sender_name: userName,
-        sender_role: "farmer",
-        message: data.description,
-        created_at: new Date().toISOString()
-      }
-    ]
+    replies: [],
   };
-  mockConsultations.unshift(newCon);
-  addAuditLog(userId, "Submitted Expert Inquiry", "consultations", `Submitted consultation subject: '${data.subject}'`);
+  await addAuditLog(userId, "Submitted Expert Inquiry", "consultations", `Submitted consultation subject: '${data.subject}'`);
   return newCon;
 }
 
 export async function addConsultationReply(userId: string, userName: string, userRole: string, consultationId: string, message: string): Promise<ConsultationReply | null> {
-  const con = mockConsultations.find(c => c.id === consultationId);
-  if (!con) return null;
-
+  const db = getDb();
+  const [consultationRows] = await db.query(
+    "SELECT farmer_id FROM consultations WHERE id = ? AND (farmer_id = ? OR ? IN ('researcher', 'admin')) LIMIT 1",
+    [consultationId, userId, userRole]
+  );
+  if (!(consultationRows as unknown[]).length) return null;
+  const id = randomUUID();
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+    await connection.execute(
+      "INSERT INTO consultation_replies (id, consultation_id, sender_id, message) VALUES (?, ?, ?, ?)",
+      [id, consultationId, userId, message]
+    );
+    if (userRole === "researcher" || userRole === "admin") {
+      await connection.execute(
+        "UPDATE consultations SET status = 'Answered', researcher_id = ? WHERE id = ?",
+        [userId, consultationId]
+      );
+    }
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+  const [threadRows] = await db.query(
+    "SELECT farmer_id, researcher_id, subject FROM consultations WHERE id = ? LIMIT 1",
+    [consultationId]
+  );
+  const thread = (threadRows as Array<{ farmer_id: string; researcher_id: string | null; subject: string }>)[0];
+  if (thread) {
+    try {
+      if (userRole === "researcher" || userRole === "admin") {
+        await createNotification(
+          thread.farmer_id,
+          "Your consultation received a reply",
+          `${userName} replied to: ${thread.subject}`
+        );
+      } else if (thread.researcher_id) {
+        try {
+          await createNotification(
+            thread.researcher_id,
+            "Farmer replied to a consultation",
+            `${userName} replied to: ${thread.subject}`
+          );
+        } catch (error) {
+          console.error("Researcher reply notification could not be saved:", error);
+        }
+        try {
+          await createAdminNotifications(
+            "Consultation activity",
+            `${userName} replied to: ${thread.subject}`
+          );
+        } catch (error) {
+          console.error("Admin consultation activity notification could not be saved:", error);
+        }
+      } else {
+        await db.execute(
+          `INSERT INTO notifications (user_id, title, message)
+           SELECT id, 'Farmer replied to a consultation', ?
+           FROM users WHERE role IN ('researcher', 'admin') AND status = 'active' AND id <> ?`,
+          [`${userName} replied to: ${thread.subject}`, userId]
+        );
+      }
+    } catch (error) {
+      console.error("Consultation reply notification could not be saved:", error);
+    }
+  }
   const reply: ConsultationReply = {
-    id: `rep-${randomUUID().slice(0, 8)}`,
+    id,
     consultation_id: consultationId,
     sender_id: userId,
     sender_name: userName,
     sender_role: userRole,
     message,
-    created_at: new Date().toISOString()
+    created_at: new Date().toISOString(),
   };
 
-  con.replies ??= [];
-  con.replies.push(reply);
-
-  if (userRole === "researcher" || userRole === "admin") {
-    con.status = "Answered";
-    con.researcher_id = userId;
-    con.researcher_name = userName;
-  }
-
-  addAuditLog(userId, "Replied to Consultation Thread", "consultation_replies", `Replied to inquiry #${consultationId.slice(0, 6)}`);
+  await addAuditLog(userId, "Replied to Consultation Thread", "consultation_replies", `Replied to inquiry #${consultationId.slice(0, 6)}`);
   return reply;
 }
 
 export async function getPublications(): Promise<ResearchPublication[]> {
-  return mockPublications;
+  const [rows] = await getDb().query(
+    `SELECT p.id, p.researcher_id, u.name AS researcher_name, p.title, p.abstract, p.pdf_url,
+            p.crop_type, p.soil_type, DATE_FORMAT(p.publication_date, '%Y-%m-%d') AS publication_date, p.created_at
+     FROM research_publications p
+     JOIN users u ON u.id = p.researcher_id
+     ORDER BY p.publication_date DESC, p.created_at DESC`
+  );
+  return (rows as Array<Record<string, unknown>>).map((row) => ({
+    id: String(row.id),
+    researcher_id: String(row.researcher_id),
+    researcher_name: String(row.researcher_name),
+    title: String(row.title),
+    abstract: String(row.abstract),
+    pdf_url: String(row.pdf_url),
+    crop_type: String(row.crop_type),
+    soil_type: String(row.soil_type),
+    publication_date: String(row.publication_date).slice(0, 10),
+    created_at: String(row.created_at),
+  }));
 }
 
 export async function createPublication(userId: string, userName: string, data: { title: string; abstract: string; pdf_url: string; crop_type: string; soil_type: string }): Promise<ResearchPublication> {
-  const id = `pub-${randomUUID().slice(0, 8)}`;
+  const id = randomUUID();
   const pub: ResearchPublication = {
     id,
     researcher_id: userId,
     researcher_name: userName,
     title: data.title,
     abstract: data.abstract,
-    pdf_url: data.pdf_url || "#",
+    pdf_url: data.pdf_url,
     crop_type: data.crop_type,
     soil_type: data.soil_type,
     publication_date: new Date().toISOString().split("T")[0],
     created_at: new Date().toISOString()
   };
-  mockPublications.unshift(pub);
-  addAuditLog(userId, "Published Research Paper", "research_publications", `Published paper: '${data.title}'`);
+  await getDb().execute(
+    "INSERT INTO research_publications (id, researcher_id, title, abstract, pdf_url, crop_type, soil_type, publication_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    [id, userId, data.title, data.abstract, data.pdf_url, data.crop_type, data.soil_type, pub.publication_date]
+  );
+  await addAuditLog(userId, "Published Research Paper", "research_publications", `Published paper: '${data.title}'`);
   return pub;
 }
 
 export async function getAuditLogs(): Promise<AuditLog[]> {
-  return mockAuditLogs;
+  const [rows] = await getDb().query(
+    `SELECT l.id, l.user_id, u.name AS user_name, u.email AS user_email, l.action, l.target_table,
+            l.details, l.ip_address, l.device_info, l.created_at
+     FROM audit_logs l
+     LEFT JOIN users u ON u.id = l.user_id
+     ORDER BY l.created_at DESC`
+  );
+  return (rows as Array<Record<string, unknown>>).map((row) => ({
+    id: String(row.id),
+    user_id: row.user_id ? String(row.user_id) : null,
+    user_name: row.user_name ? String(row.user_name) : undefined,
+    user_email: row.user_email ? String(row.user_email) : undefined,
+    action: String(row.action),
+    target_table: String(row.target_table),
+    details: String(row.details || ""),
+    ip_address: row.ip_address ? String(row.ip_address) : null,
+    device_info: row.device_info ? String(row.device_info) : null,
+    created_at: String(row.created_at),
+  }));
 }
 
-export function addAuditLog(userId: string | null, action: string, target_table: string, details: string, ip = "127.0.0.1", device = "Browser Client") {
-  const log: AuditLog = {
-    id: `aud-${randomUUID().slice(0, 8)}`,
-    user_id: userId,
-    user_name: userId === "admin-1" ? "System Admin" : "Active User",
-    user_email: "user@agrikms.org",
-    action,
-    target_table,
-    details,
-    ip_address: ip,
-    device_info: device,
-    created_at: new Date().toISOString()
+export async function createNotification(
+  userId: string,
+  title: string,
+  message: string,
+  recommendationId: string | null = null
+): Promise<void> {
+  await getDb().execute(
+    "INSERT INTO notifications (user_id, recommendation_id, title, message) VALUES (?, ?, ?, ?)",
+    [userId, recommendationId, title, message]
+  );
+}
+
+export async function createAdminNotifications(title: string, message: string): Promise<void> {
+  await getDb().execute(
+    `INSERT INTO notifications (user_id, title, message)
+     SELECT id, ?, ? FROM users WHERE role = 'admin' AND status = 'active'`,
+    [title, message]
+  );
+}
+
+export async function getUserNotifications(
+  userId: string,
+  limit = 10
+): Promise<{ notifications: UserNotification[]; unreadCount: number }> {
+  const db = getDb();
+  const [[rows], [countRows]] = await Promise.all([
+    db.query(
+      `SELECT id, title, message, recommendation_id, read_at, created_at
+       FROM notifications WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT ?`,
+      [userId, limit]
+    ),
+    db.query("SELECT COUNT(*) AS total FROM notifications WHERE user_id = ? AND read_at IS NULL", [userId]),
+  ]);
+  return {
+    notifications: (rows as Array<Record<string, unknown>>).map((row) => ({
+      id: String(row.id),
+      title: String(row.title),
+      message: String(row.message),
+      recommendation_id: row.recommendation_id === null ? null : String(row.recommendation_id),
+      read_at: row.read_at ? String(row.read_at) : null,
+      created_at: String(row.created_at),
+    })),
+    unreadCount: Number((countRows as Array<{ total: number }>)[0]?.total ?? 0),
   };
-  mockAuditLogs.unshift(log);
+}
+
+export async function markUserNotificationRead(
+  userId: string,
+  notificationId?: string
+): Promise<void> {
+  if (notificationId) {
+    await getDb().execute(
+      "UPDATE notifications SET read_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ? AND read_at IS NULL",
+      [notificationId, userId]
+    );
+    return;
+  }
+  await getDb().execute(
+    "UPDATE notifications SET read_at = CURRENT_TIMESTAMP WHERE user_id = ? AND read_at IS NULL",
+    [userId]
+  );
+}
+
+export async function getAdminSystemReport(): Promise<Array<{ label: string; value: number }>> {
+  const db = getDb();
+  const queries: Array<[string, string]> = [
+    ["Total accounts", "SELECT COUNT(*) AS total FROM users"],
+    ["Pending accounts", "SELECT COUNT(*) AS total FROM users WHERE status = 'pending'"],
+    ["Registered farms", "SELECT COUNT(*) AS total FROM farms"],
+    ["Registered fields", "SELECT COUNT(*) AS total FROM fields"],
+    ["Crop catalog entries", "SELECT COUNT(*) AS total FROM crops"],
+    ["Pest and disease records", "SELECT COUNT(*) AS total FROM pests_diseases"],
+    ["Knowledge articles", "SELECT COUNT(*) AS total FROM knowledge_articles"],
+    ["Saved recommendations", "SELECT COUNT(*) AS total FROM recommendations"],
+    ["Farmer consultations", "SELECT COUNT(*) AS total FROM consultations"],
+    ["Research publications", "SELECT COUNT(*) AS total FROM research_publications"],
+    ["Crop advisor analyses", "SELECT COUNT(*) AS total FROM analyses"],
+    ["Audit events", "SELECT COUNT(*) AS total FROM audit_logs"],
+  ];
+  const values = await Promise.all(queries.map(async ([label, sql]) => {
+    const [rows] = await db.query(sql);
+    const total = Number((rows as Array<{ total: number }>)[0]?.total ?? 0);
+    return { label, value: total };
+  }));
+  return values;
+}
+
+export async function addAuditLog(
+  userId: string | null,
+  action: string,
+  target_table: string,
+  details: string,
+  ip: string | null = null,
+  device: string | null = null
+) {
+  await getDb().execute(
+    "INSERT INTO audit_logs (user_id, action, target_table, details, ip_address, device_info) VALUES (?, ?, ?, ?, ?, ?)",
+    [userId, action, target_table, details, ip, device]
+  );
+}
+
+export async function getPublicAboutData(): Promise<PublicAboutData> {
+  const db = getDb();
+  const [[farmers], [farms], [crops], [publications], [researchers]] = await Promise.all([
+    db.query("SELECT COUNT(*) AS total FROM users WHERE role = 'farmer' AND status = 'active'"),
+    db.query("SELECT COUNT(*) AS total FROM farms"),
+    db.query("SELECT COUNT(*) AS total FROM crops"),
+    db.query("SELECT COUNT(*) AS total FROM research_publications"),
+    db.query("SELECT id, name, role FROM users WHERE role = 'researcher' AND status = 'active' ORDER BY name"),
+  ]);
+  const count = (rows: unknown) => Number((rows as Array<{ total: number }>)[0]?.total ?? 0);
+  return {
+    researchers: (researchers as Array<Record<string, unknown>>).map((row) => ({
+      id: String(row.id),
+      name: String(row.name),
+      role: String(row.role),
+    })),
+    stats: [
+      { value: count(farmers), label: "Active farmers" },
+      { value: count(farms), label: "Registered farms" },
+      { value: count(crops), label: "Crops in the catalog" },
+      { value: count(publications), label: "Research publications" },
+    ],
+  };
+}
+
+export async function getLatestWeatherSnapshot(userId: string): Promise<StoredWeatherSnapshot | null> {
+  const [rows] = await getDb().query(
+    `SELECT l.name AS location, w.temperature_c, w.humidity_percent, w.rainfall_probability_percent,
+            w.wind_kph, w.condition_label, w.observed_at
+     FROM weather_snapshots w
+     JOIN locations l ON l.id = w.location_id
+     LEFT JOIN farms f ON f.location_id = l.id AND f.owner_id = l.user_id
+     LEFT JOIN user_preferences p ON p.user_id = l.user_id
+     WHERE l.user_id = ?
+     ORDER BY (f.id = p.default_farm_id) DESC, w.observed_at DESC
+     LIMIT 1`,
+    [userId]
+  );
+  const row = (rows as Array<Record<string, unknown>>)[0];
+  if (!row) return null;
+  return {
+    location: String(row.location || ""),
+    temperature_c: Number(row.temperature_c),
+    humidity_percent: row.humidity_percent === null ? null : Number(row.humidity_percent),
+    rainfall_probability_percent:
+      row.rainfall_probability_percent === null ? null : Number(row.rainfall_probability_percent),
+    wind_kph: row.wind_kph === null ? null : Number(row.wind_kph),
+    condition_label: String(row.condition_label || ""),
+    observed_at: String(row.observed_at),
+  };
+}
+
+export async function getUserPreferences(userId: string): Promise<UserPreferences> {
+  const db = getDb();
+  await db.execute(
+    "INSERT INTO user_preferences (user_id) VALUES (?) ON DUPLICATE KEY UPDATE user_id = VALUES(user_id)",
+    [userId]
+  );
+  const [rows] = await db.query(
+    `SELECT default_farm_id, units, notify_weather, notify_recommendations
+     FROM user_preferences
+     WHERE user_id = ?
+     LIMIT 1`,
+    [userId]
+  );
+  const row = (rows as Array<Record<string, unknown>>)[0];
+  if (!row) throw new Error("Unable to load user preferences.");
+  return {
+    default_farm_id: row.default_farm_id === null ? null : String(row.default_farm_id),
+    units: row.units === "imperial" ? "imperial" : "metric",
+    notify_weather: Boolean(row.notify_weather),
+    notify_recommendations: Boolean(row.notify_recommendations),
+  };
+}
+
+export async function saveUserPreferences(
+  userId: string,
+  preferences: UserPreferences
+): Promise<UserPreferences> {
+  const db = getDb();
+  if (preferences.default_farm_id) {
+    const [farms] = await db.query(
+      "SELECT id FROM farms WHERE id = ? AND owner_id = ? LIMIT 1",
+      [preferences.default_farm_id, userId]
+    );
+    if (!(farms as Array<{ id: number }>).length) throw new Error("The selected farm does not belong to this account.");
+  }
+  await db.execute(
+    `INSERT INTO user_preferences (user_id, default_farm_id, units, notify_weather, notify_recommendations)
+     VALUES (?, ?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE default_farm_id = VALUES(default_farm_id),
+       units = VALUES(units), notify_weather = VALUES(notify_weather),
+       notify_recommendations = VALUES(notify_recommendations)`,
+    [
+      userId,
+      preferences.default_farm_id,
+      preferences.units,
+      preferences.notify_weather,
+      preferences.notify_recommendations,
+    ]
+  );
+  await addAuditLog(userId, "Updated User Preferences", "user_preferences", "Updated farm, units, or notification preferences");
+  return preferences;
 }
 
 export async function getCropAdvisorAnalyses(userId: string): Promise<CropAdvisorAnalysis[]> {
-  let dbAnalyses: CropAdvisorAnalysis[] = [];
   const db = getDb();
-
-  if (db) {
-    try {
-      const [rows] = await db.query(
-        `SELECT id, user_id, image_name, location_name, latitude, longitude,
-                image_observations, internal_research, web_research, environmental_data,
-                recommendations, less_suitable, confidence_score, missing_information, created_at
-         FROM crop_advisor_analyses
-         WHERE user_id = ?
-         ORDER BY created_at DESC`,
-        [userId]
-      );
-      if (Array.isArray(rows)) {
-        dbAnalyses = (rows as Array<Record<string, unknown>>).map((r) => ({
-          id: String(r.id),
-          user_id: String(r.user_id),
-          image_name: (r.image_name as string) || undefined,
-          location_name: (r.location_name as string) || undefined,
-          latitude: typeof r.latitude === "number" ? r.latitude : undefined,
-          longitude: typeof r.longitude === "number" ? r.longitude : undefined,
-          image_observations: typeof r.image_observations === "string" ? JSON.parse(r.image_observations) : r.image_observations,
-          internal_research: typeof r.internal_research === "string" ? JSON.parse(r.internal_research) : r.internal_research,
-          web_research: typeof r.web_research === "string" ? JSON.parse(r.web_research) : r.web_research,
-          environmental_data: typeof r.environmental_data === "string" ? JSON.parse(r.environmental_data) : r.environmental_data,
-          recommendations: typeof r.recommendations === "string" ? JSON.parse(r.recommendations) : r.recommendations,
-          less_suitable: typeof r.less_suitable === "string" ? JSON.parse(r.less_suitable) : r.less_suitable,
-          confidence_score: typeof r.confidence_score === "string" ? JSON.parse(r.confidence_score) : r.confidence_score,
-          missing_information: typeof r.missing_information === "string" ? JSON.parse(r.missing_information) : r.missing_information,
-          created_at: String(r.created_at),
-        })) as CropAdvisorAnalysis[];
-      }
-    } catch {
-      // Ignore DB query errors and rely on memory store
-    }
-  }
-
-  const memoryAnalyses = mockCropAdvisorAnalyses.filter((a) => a.user_id === userId);
-  
-  // Combine DB and memory store items, avoiding duplicates
-  const allAnalysesMap = new Map<string, CropAdvisorAnalysis>();
-  for (const item of memoryAnalyses) {
-    allAnalysesMap.set(item.id, item);
-  }
-  for (const item of dbAnalyses) {
-    allAnalysesMap.set(item.id, item);
-  }
-
-  return Array.from(allAnalysesMap.values()).sort(
-    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  const [rows] = await db.query(
+    `SELECT id, user_id, ai_analysis, missing_information, created_at
+     FROM analyses WHERE user_id = ? ORDER BY created_at DESC`,
+    [userId]
   );
+  return (rows as Array<Record<string, unknown>>).map((row) => {
+    if (typeof row.ai_analysis !== "string" || !row.ai_analysis) {
+      throw new Error(`Analysis ${String(row.id)} does not contain a saved result.`);
+    }
+    const saved = JSON.parse(row.ai_analysis) as Omit<CropAdvisorAnalysis, "id" | "user_id" | "created_at">;
+    return {
+      ...saved,
+      id: String(row.id),
+      user_id: String(row.user_id),
+      missing_information:
+        typeof row.missing_information === "string"
+          ? JSON.parse(row.missing_information)
+          : saved.missing_information,
+      created_at: String(row.created_at),
+    };
+  });
 }
 
 export async function saveCropAdvisorAnalysis(
   userId: string,
   analysisData: Omit<CropAdvisorAnalysis, "id" | "user_id" | "created_at">
 ): Promise<CropAdvisorAnalysis> {
-  const id = `caa-${randomUUID().slice(0, 8)}`;
+  const id = randomUUID();
   const now = new Date().toISOString();
   const analysis: CropAdvisorAnalysis = {
     ...analysisData,
@@ -869,57 +1508,90 @@ export async function saveCropAdvisorAnalysis(
   };
 
   const db = getDb();
-  if (db) {
-    try {
-      await db.query(
-        `INSERT INTO crop_advisor_analyses (
-          id, user_id, image_name, location_name, latitude, longitude,
-          image_observations, internal_research, web_research, environmental_data,
-          recommendations, less_suitable, confidence_score, missing_information, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [locationResult] = await connection.execute(
+      "INSERT INTO locations (user_id, latitude, longitude, name) VALUES (?, ?, ?, ?)",
+      [
+        userId,
+        analysisData.latitude ?? null,
+        analysisData.longitude ?? null,
+        analysisData.location_name || analysisData.environmental_data.locationName || null,
+      ]
+    );
+    const locationId = (locationResult as { insertId: number }).insertId;
+    await connection.execute(
+      `INSERT INTO analyses (id, user_id, location_id, image_reference, ai_analysis, missing_information)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        userId,
+        locationId,
+        analysisData.image_name || null,
+        JSON.stringify(analysisData),
+        JSON.stringify(analysisData.missing_information),
+      ]
+    );
+    await connection.execute(
+      "INSERT INTO soil_data (analysis_id, payload) VALUES (?, ?)",
+      [id, JSON.stringify(analysisData.image_observations)]
+    );
+    await connection.execute(
+      "INSERT INTO weather_data (analysis_id, payload) VALUES (?, ?)",
+      [id, JSON.stringify(analysisData.environmental_data)]
+    );
+    for (const recommendation of analysisData.recommendations) {
+      await connection.execute(
+        `INSERT INTO crop_recommendations
+           (analysis_id, crop_name, score, confidence, explanation, risks, considerations, next_steps)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           id,
-          userId,
-          analysisData.image_name || null,
-          analysisData.location_name || null,
-          analysisData.latitude || null,
-          analysisData.longitude || null,
-          JSON.stringify(analysisData.image_observations),
-          JSON.stringify(analysisData.internal_research),
-          JSON.stringify(analysisData.web_research),
-          JSON.stringify(analysisData.environmental_data),
-          JSON.stringify(analysisData.recommendations),
-          JSON.stringify(analysisData.less_suitable),
-          JSON.stringify(analysisData.confidence_score),
-          JSON.stringify(analysisData.missing_information),
-          now,
+          recommendation.plantName,
+          Math.max(0, Math.min(100, Math.round(recommendation.estimatedSuitability))),
+          analysisData.confidence_score.overallLevel,
+          recommendation.reasons.join("\n"),
+          JSON.stringify(recommendation.potentialProblems),
+          JSON.stringify(recommendation.supportingObservations),
+          JSON.stringify(recommendation.requiredImprovements),
         ]
       );
-    } catch (err) {
-      console.warn("MySQL insert fallback for Crop Advisor Analysis:", err);
     }
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
   }
-
-  mockCropAdvisorAnalyses.unshift(analysis);
-  addAuditLog(userId, "Performed Crop Advisor Soil Analysis", "crop_advisor_analyses", `Analyzed land image for location: '${analysisData.location_name || "Unknown Location"}' (ID: ${id})`);
+  await addAuditLog(userId, "Performed Crop Advisor Soil Analysis", "analyses", `Analyzed land image for location: '${analysisData.location_name || "Unknown Location"}' (ID: ${id})`);
   return analysis;
 }
 
 export async function deleteCropAdvisorAnalysis(userId: string, analysisId: string): Promise<boolean> {
   const db = getDb();
-  if (db) {
-    try {
-      await db.query(`DELETE FROM crop_advisor_analyses WHERE id = ? AND user_id = ?`, [analysisId, userId]);
-    } catch {
-      // Fallback
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [rows] = await connection.query(
+      "SELECT id FROM analyses WHERE id = ? AND user_id = ? FOR UPDATE",
+      [analysisId, userId]
+    );
+    if (!(rows as unknown[]).length) {
+      await connection.rollback();
+      return false;
     }
+    await connection.execute("DELETE FROM crop_recommendations WHERE analysis_id = ?", [analysisId]);
+    await connection.execute("DELETE FROM soil_data WHERE analysis_id = ?", [analysisId]);
+    await connection.execute("DELETE FROM weather_data WHERE analysis_id = ?", [analysisId]);
+    await connection.execute("DELETE FROM analyses WHERE id = ? AND user_id = ?", [analysisId, userId]);
+    await connection.commit();
+    return true;
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
   }
-
-  const idx = mockCropAdvisorAnalyses.findIndex((a) => a.id === analysisId && a.user_id === userId);
-  if (idx !== -1) {
-    mockCropAdvisorAnalyses.splice(idx, 1);
-  }
-  return true;
 }
-
-

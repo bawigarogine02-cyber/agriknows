@@ -1,6 +1,8 @@
 import { ArrowRight, BarChart3, Sprout, Users } from "lucide-react";
 import PageContainer from "@/components/layout/PageContainer";
 import HeroSection from "@/components/ui/HeroSection";
+import { getPublicAboutData } from "@/lib/db/repository";
+import { getRoleLabel } from "@/lib/utils/role-label";
 
 const values = [
   {
@@ -20,41 +22,11 @@ const values = [
   },
 ];
 
-const team = [
-  {
-    initials: "AO",
-    name: "Adaeze Obi",
-    role: "Co-Founder & CEO",
-    bio: "Connecting smallholder farmers to modern agronomic science.",
-  },
-  {
-    initials: "JA",
-    name: "Dr. James Adeyemi",
-    role: "Chief Agronomist",
-    bio: "Twenty years studying soil health across West Africa.",
-  },
-  {
-    initials: "ML",
-    name: "Mei Lin",
-    role: "Head of Engineering",
-    bio: "Building resilient systems for low-connectivity environments.",
-  },
-  {
-    initials: "TB",
-    name: "Tunde Bakare",
-    role: "Community Lead",
-    bio: "Bridging extension workers and the platform they rely on.",
-  },
-];
+export const dynamic = "force-dynamic";
 
-const stats = [
-  { value: "12,000+", label: "Farmers reached" },
-  { value: "8", label: "Countries" },
-  { value: "340+", label: "Research papers indexed" },
-  { value: "92%", label: "Decision satisfaction rate" },
-];
+export default async function AboutPage() {
+  const { researchers, stats } = await getPublicAboutData();
 
-export default function AboutPage() {
   return (
     <>
       <HeroSection
@@ -73,11 +45,10 @@ export default function AboutPage() {
         primaryCta={{ label: "Get Started", href: "/auth" }}
         secondaryCta={{ label: "Contact Us", href: "/contact" }}
         rightCardTitle="From seed to signal"
-        rightCardItems={[
-          { label: "Field insights", value: "24/7" },
-          { label: "Decision support", value: "AI-driven" },
-          { label: "Community learning", value: "Live" },
-        ]}
+        rightCardItems={stats.slice(0, 3).map((stat) => ({
+          label: stat.label,
+          value: stat.value.toLocaleString(),
+        }))}
       />
 
       <PageContainer className="!py-0">
@@ -100,7 +71,7 @@ export default function AboutPage() {
         <p className="max-w-2xl self-end text-lg leading-8 text-[#5C635A]">
           <span>
             AgriKnow turns raw field data, scientific research, and environmental
-            signals into clear, actionable guidance for every grower, researcher,
+            signals into clear, actionable guidance for every grower, agricultural researcher,
             and extension worker — no matter where they work.
           </span>
         </p>
@@ -145,28 +116,28 @@ export default function AboutPage() {
           </h2>
         </div>
         <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-          {team.map(({ initials, name, role, bio }) => (
+          {researchers.map(({ id, name, role }) => (
             <article
-              key={name}
+              key={id}
               className="rounded-2xl border border-[#E2E8E1] bg-white p-6 text-center shadow-sm transition duration-300 hover:-translate-y-1 hover:border-[#B8CFB4] hover:shadow-lg hover:shadow-[#2D5A27]/10"
             >
               <div
                 className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-[#EAF3E7] font-semibold text-[#2D5A27]"
                 aria-hidden="true"
               >
-                <span>{initials}</span>
+                <span>{name.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase()}</span>
               </div>
               <h3 className="text-lg font-semibold tracking-[-0.02em]">
                 <span>{name}</span>
               </h3>
               <p className="mt-1 text-sm text-[#8B4513]">
-                <span>{role}</span>
-              </p>
-              <p className="mt-2 text-sm leading-6 text-[#5C635A]">
-                <span>{bio}</span>
+                <span>{getRoleLabel(role)}</span>
               </p>
             </article>
           ))}
+          {researchers.length === 0 && (
+            <p className="text-sm text-[#5C635A]">No active agricultural researcher profiles are available.</p>
+          )}
         </div>
       </section>
 
@@ -178,7 +149,7 @@ export default function AboutPage() {
           {stats.map(({ value, label }) => (
             <div key={label}>
               <dt className="text-4xl font-bold tracking-[-0.04em] text-[#2D5A27]">
-                <span>{value}</span>
+                <span>{value.toLocaleString()}</span>
               </dt>
               <dd className="mt-1 text-sm text-[#5C635A]">
                 <span>{label}</span>

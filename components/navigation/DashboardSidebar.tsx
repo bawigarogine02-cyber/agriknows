@@ -16,6 +16,7 @@ import {
   UserCheck,
 } from "lucide-react";
 import Link from "next/link";
+import { getRoleLabel } from "@/lib/utils/role-label";
 import { usePathname } from "next/navigation";
 
 interface DashboardSidebarProps {
@@ -90,7 +91,7 @@ export default function DashboardSidebar({ isOpen, onClose, userRole }: Dashboar
               <p className="text-[23px] font-extrabold tracking-[-0.8px]">AgriKMS</p>
               <div className="mt-1 flex items-center gap-1.5">
                 <span className="rounded-md bg-emerald-400/20 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-emerald-200 border border-emerald-300/30">
-                  {role} Portal
+                  {getRoleLabel(role)} Portal
                 </span>
               </div>
             </>
@@ -113,7 +114,9 @@ export default function DashboardSidebar({ isOpen, onClose, userRole }: Dashboar
 
       <nav aria-label="Primary navigation" className="space-y-1">
         {navItems.map(({ label, href, icon: Icon }) => {
-          const isActive = pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
+          const isActive =
+            pathname === href ||
+            (href !== "/dashboard" && href !== "/admin" && pathname.startsWith(`${href}/`));
 
           return (
             <Link
@@ -150,14 +153,14 @@ export default function DashboardSidebar({ isOpen, onClose, userRole }: Dashboar
               {role === "admin"
                 ? "Admin Help & Docs"
                 : role === "researcher"
-                ? "Researcher Portal"
+                ? "Agricultural Researcher Portal"
                 : "Farmer Support"}
             </h2>
             <p className="mt-2 text-base leading-6 text-emerald-50/75">
               {role === "admin"
                 ? "Manage system governance, user roles, and website SEO."
                 : role === "researcher"
-                ? "Publish crop & soil research to enrich recommendations."
+                ? "Publish agricultural research to enrich recommendations."
                 : "Get expert advice and soil recommendations."}
             </p>
             <Link

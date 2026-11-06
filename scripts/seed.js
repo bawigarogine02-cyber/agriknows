@@ -1,22 +1,15 @@
-const mysql = require("mysql2/promise");
-const crypto = require("crypto");
-const util = require("util");
-const scrypt = util.promisify(crypto.scrypt);
-
-async function hashPassword(password) {
-  const salt = crypto.randomBytes(16).toString("hex");
-  const key = await scrypt(password, salt, 64);
-  return `${salt}:${key.toString("hex")}`;
-}
+import mysql from "mysql2/promise";
 
 async function run() {
-  const conn = await mysql.createConnection({
-    host: process.env.DB_HOST || "localhost",
-    user: process.env.DB_USER || "root",
-    password: process.env.DB_PASSWORD || "",
-    database: process.env.DB_NAME || "farm_reports",
-    port: Number(process.env.DB_PORT || 3306),
-  });
+  const conn = process.env.DATABASE_URL
+    ? await mysql.createConnection(process.env.DATABASE_URL)
+    : await mysql.createConnection({
+        host: process.env.DB_HOST || "localhost",
+        user: process.env.DB_USER || "root",
+        password: process.env.DB_PASSWORD || "",
+        database: process.env.DB_NAME || "farm_reports",
+        port: Number(process.env.DB_PORT || 3306),
+      });
 
   console.log("Connected to MySQL database. Applying schema updates...");
   try {
@@ -32,27 +25,6 @@ async function run() {
     await conn.query("ALTER TABLE users ADD COLUMN address VARCHAR(255) NULL AFTER status");
   } catch (e) {
     console.log("Address column info:", e.message);
-  }
-
-  const passHash = await hashPassword("Password123!");
-  const defaultUsers = [
-    { id: "u-farmer-1", name: "Frank Farmer", email: "farmer@agrikms.org", role: "farmer", status: "active", address: "Green Valley Farm, Sector 4" },
-    { id: "u-res-1", name: "Dr. Elena Rostova", email: "researcher@agrikms.org", role: "researcher", status: "active", address: "Agricultural Research Station, Zone B" },
-    { id: "u-admin-1", name: "System Administrator", email: "admin@agrikms.org", role: "admin", status: "active", address: "AgriKnow HQ" }
-  ];
-
-  for (const u of defaultUsers) {
-    const [rows] = await conn.query("SELECT id FROM users WHERE email = ?", [u.email]);
-    if (rows.length === 0) {
-      await conn.query(
-        "INSERT INTO users (id, name, email, role, status, password_hash, address) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        [u.id, u.name, u.email, u.role, u.status, passHash, u.address]
-      );
-      console.log("Seeded account:", u.email);
-    } else {
-      await conn.query("UPDATE users SET role = ?, status = ? WHERE email = ?", [u.role, u.status, u.email]);
-      console.log("Updated existing account role:", u.email);
-    }
   }
 
   // Seed initial crops in DB if crops table is empty
@@ -76,11 +48,8 @@ async function run() {
     console.log("Crops seeded successfully!");
   }
 
-  const [allUsers] = await conn.query("SELECT id, name, email, role, status FROM users");
-  console.log("ALL USERS IN DB NOW:", allUsers);
-
   const [allCrops] = await conn.query("SELECT id, name, season FROM crops");
-  console.log("ALL CROPS IN DB NOW:", allCrops);
+  console.log(`Crop catalog contains ${allCrops.length} database records.`);
 
   await conn.end();
 }

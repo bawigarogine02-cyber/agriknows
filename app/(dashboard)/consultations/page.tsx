@@ -12,7 +12,7 @@ export default async function ConsultationsPage() {
   }
 
   const [consultations, publications, crops] = await Promise.all([
-    getConsultations(),
+    getConsultations(session.id, session.role),
     getPublications(),
     getCrops()
   ]);
@@ -24,7 +24,7 @@ export default async function ConsultationsPage() {
           AgriKMS Module 4
         </span>
         <h1 className="mt-2 text-2xl font-extrabold tracking-tight text-[#064b3b] sm:text-3xl">
-          Researcher Consultations & Publications
+          Agricultural Researcher Consultations & Publications
         </h1>
         <p className="mt-2 max-w-3xl text-sm leading-relaxed text-[#45675e]">
           Communication bridge connecting farmers directly to verified agricultural scientists. Submit diagnostic inquiries, track resolution threads, and read peer-reviewed field research papers.

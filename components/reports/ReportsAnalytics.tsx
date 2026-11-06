@@ -1,8 +1,8 @@
 "use client";
 
-import { Field, Recommendation } from "@/lib/db/repository";
+import type { Field, Recommendation } from "@/lib/db/repository";
 import { BarChart3, Download, FileSpreadsheet, Filter, Layers, Printer, Sprout } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 interface ReportsAnalyticsProps {
   fields: Field[];
@@ -13,12 +13,27 @@ export default function ReportsAnalytics({ fields, recommendations }: ReportsAna
   const [dateRange, setDateRange] = useState("30");
   const [advisoryType, setAdvisoryType] = useState("all");
   const [cropCategory, setCropCategory] = useState("all");
+  const [referenceTime, setReferenceTime] = useState<number | null>(null);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setReferenceTime(Date.now()), 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  const cutoff = dateRange === "all" || referenceTime === null
+    ? null
+    : new Date(referenceTime - Number(dateRange) * 24 * 60 * 60 * 1000);
+  const cropNames = Array.from(new Set([
+    ...fields.map((field) => field.crop_name),
+    ...recommendations.map((recommendation) => recommendation.crop_name),
+  ].filter((name): name is string => Boolean(name))));
 
   const filteredRecommendations = recommendations.filter((r) => {
     const matchesType = advisoryType === "all" || r.type === advisoryType;
     const matchesCrop = cropCategory === "all" || (r.crop_name && r.crop_name.toLowerCase().includes(cropCategory.toLowerCase()));
-    return matchesType && matchesCrop;
+    const matchesDate = cutoff === null || new Date(r.created_at) >= cutoff;
+    return matchesType && matchesCrop && matchesDate;
   });
+  const exportUrl = `/api/reports/export?days=${dateRange}&type=${advisoryType}&crop=${encodeURIComponent(cropCategory)}`;
 
   // Calculate summary stat cards
   const totalFields = fields.length;
@@ -31,7 +46,7 @@ export default function ReportsAnalytics({ fields, recommendations }: ReportsAna
     const crop = f.crop_name || "Unspecified";
     cropCounts[crop] = (cropCounts[crop] || 0) + 1;
   });
-  const topCrop = Object.entries(cropCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || "Maize (Corn)";
+  const topCrop = Object.entries(cropCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || "—";
 
   function handlePrintPDF() {
     window.print();
@@ -56,7 +71,9 @@ export default function ReportsAnalytics({ fields, recommendations }: ReportsAna
           </div>
           <p className="mt-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Top Cultivated Crop</p>
           <strong className="mt-1 block text-2xl font-extrabold text-[#123d35] truncate">{topCrop}</strong>
-          <span className="mt-1 block text-xs font-medium text-slate-400">Primary Canopy Cover</span>
+          <span className="mt-1 block text-xs font-medium text-slate-400">
+            {cropCounts[topCrop] || 0} field records
+          </span>
         </article>
 
         <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
@@ -93,7 +110,7 @@ export default function ReportsAnalytics({ fields, recommendations }: ReportsAna
           >
             <option value="30">Last 30 Days</option>
             <option value="90">Last Quarter (90 Days)</option>
-            <option value="365">Year to Date (365 Days)</option>
+            <option value="365">Last 365 Days</option>
             <option value="all">All Time History</option>
           </select>
 
@@ -105,6 +122,7 @@ export default function ReportsAnalytics({ fields, recommendations }: ReportsAna
             <option value="all">All Advisory Types</option>
             <option value="fertilizer">Fertilizer Plans</option>
             <option value="irrigation">Irrigation Schedules</option>
+            <option value="general">General</option>
           </select>
 
           <select
@@ -113,17 +131,16 @@ export default function ReportsAnalytics({ fields, recommendations }: ReportsAna
             className="h-10 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-700 outline-none"
           >
             <option value="all">All Crop Categories</option>
-            <option value="maize">Maize (Corn)</option>
-            <option value="rice">Rice (Paddy)</option>
-            <option value="wheat">Wheat</option>
-            <option value="soybean">Soybean</option>
+            {cropNames.map((name) => (
+              <option key={name} value={name}>{name}</option>
+            ))}
           </select>
         </div>
 
         {/* Export Actions */}
         <div className="flex items-center gap-3">
           <a
-            href="/api/reports/export"
+            href={exportUrl}
             download
             className="flex items-center gap-2 rounded-xl bg-[#16875f] px-4 py-2.5 text-xs font-bold text-white shadow-md hover:bg-[#064b3b]"
           >
@@ -164,8 +181,8 @@ export default function ReportsAnalytics({ fields, recommendations }: ReportsAna
             <tbody className="divide-y divide-slate-100">
               {filteredRecommendations.map((r) => (
                 <tr key={r.id} className="hover:bg-slate-50/60">
-                  <td className="p-3.5 font-bold text-[#123d35]">{r.field_name || "North Maize Plot"}</td>
-                  <td className="p-3.5 font-semibold text-slate-700">{r.crop_name || "Maize"}</td>
+                  <td className="p-3.5 font-bold text-[#123d35]">{r.field_name || "—"}</td>
+                  <td className="p-3.5 font-semibold text-slate-700">{r.crop_name || "—"}</td>
                   <td className="p-3.5">
                     <span
                       className={`inline-block rounded-md px-2 py-0.5 font-extrabold capitalize ${
@@ -177,12 +194,17 @@ export default function ReportsAnalytics({ fields, recommendations }: ReportsAna
                       {r.type}
                     </span>
                   </td>
-                  <td className="p-3.5 text-slate-600 capitalize">{r.crop_stage || "Vegetative"}</td>
-                  <td className="p-3.5 text-slate-600 font-medium">{r.rule_applied || "Heuristic Protocol"}</td>
-                  <td className="p-3.5 text-slate-700 max-w-xs truncate">{r.output_text?.replace(/\*/g, "")}</td>
+                  <td className="p-3.5 text-slate-600 capitalize">{r.crop_stage || "—"}</td>
+                  <td className="p-3.5 text-slate-600 font-medium">{r.rule_applied || "—"}</td>
+                  <td className="p-3.5 text-slate-700 max-w-xs truncate">{r.output_text?.replace(/\*/g, "") || "—"}</td>
                   <td className="p-3.5 text-slate-400">{new Date(r.created_at).toLocaleDateString()}</td>
                 </tr>
               ))}
+              {filteredRecommendations.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="p-6 text-center text-slate-500">No database records match these filters.</td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

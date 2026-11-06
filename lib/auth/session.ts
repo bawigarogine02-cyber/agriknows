@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
+import { getDb } from "@/lib/db/pool";
 
 const COOKIE_NAME = "agriknow_session";
 const SESSION_SECRET = process.env.SESSION_SECRET;
@@ -55,7 +56,29 @@ export function verifySessionValue(value: string | undefined): SessionUser | nul
 
 export async function getSession() {
   const cookieStore = await cookies();
-  return verifySessionValue(cookieStore.get(COOKIE_NAME)?.value);
+  const session = verifySessionValue(cookieStore.get(COOKIE_NAME)?.value);
+  if (!session) return null;
+
+  const db = getDb();
+  const [rows] = await db.query(
+    "SELECT id, name, email, role, status, address FROM users WHERE id = ? LIMIT 1",
+    [session.id]
+  );
+  const account = (rows as Array<Record<string, unknown>>)[0];
+  if (!account || account.status !== "active") return null;
+
+  const role = ["farmer", "researcher", "admin"].includes(String(account.role))
+    ? (String(account.role) as SessionUser["role"])
+    : "farmer";
+  return {
+    ...session,
+    id: String(account.id),
+    name: String(account.name),
+    email: String(account.email),
+    role,
+    status: "active" as const,
+    address: account.address ? String(account.address) : "",
+  };
 }
 
 export const sessionCookie = { name: COOKIE_NAME, options: { httpOnly: true, sameSite: "lax" as const, secure: process.env.NODE_ENV === "production", path: "/", maxAge: SESSION_TTL_SECONDS } };

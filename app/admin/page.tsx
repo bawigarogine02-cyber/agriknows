@@ -18,7 +18,7 @@ export default async function AdminOverviewPage() {
           System Audit & User Monitoring
         </h1>
         <p className="mt-3 max-w-2xl text-base leading-relaxed text-[#45675e]">
-          Platform governance tools for managing user role assignments (Farmer, Researcher, Admin), account status toggles, and real-time compliance audit logs.
+          Platform governance tools for managing user role assignments (Farmer, Agricultural Researcher, Administrator), account status toggles, and real-time compliance audit logs.
         </p>
       </header>
 

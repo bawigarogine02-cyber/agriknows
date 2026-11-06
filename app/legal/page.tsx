@@ -124,7 +124,7 @@ const documents: Record<
         id: "terms-accounts",
         title: "3. User Accounts & Eligibility",
         content: [
-          "AgriKnow is intended for farmers, researchers, agronomists, and other agricultural professionals who can form a binding agreement. You are responsible for accurate account details, protecting your sign-in credentials, and activity conducted through your account.",
+          "AgriKnow is intended for farmers, agricultural researchers, agronomists, and other agricultural professionals who can form a binding agreement. You are responsible for accurate account details, protecting your sign-in credentials, and activity conducted through your account.",
         ],
       },
       {

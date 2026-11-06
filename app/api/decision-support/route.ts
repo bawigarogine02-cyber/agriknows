@@ -21,7 +21,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid JSON request" }, { status: 400 });
   }
 
-  if (!body.field_id || !body.crop_stage || !body.rainfall_recent) {
+  const cropStages = ["seedling", "vegetative", "flowering", "mature"];
+  const rainfallLevels = ["Low (<25mm)", "Moderate (25-50mm)", "Heavy (>50mm)"];
+  const observedIssues = [
+    "None",
+    "Leaf Yellowing (N-deficiency)",
+    "Stunted Growth & Purple Leaves",
+    "Marginal Leaf Scorching",
+    "Severe Pest Infestation",
+  ];
+  if (
+    !body.field_id ||
+    !cropStages.includes(body.crop_stage || "") ||
+    !rainfallLevels.includes(body.rainfall_recent || "") ||
+    !observedIssues.includes(body.observed_issues || "None")
+  ) {
     return NextResponse.json({ error: "Select a field plot, growth stage, and rainfall condition." }, { status: 400 });
   }
 
@@ -32,47 +46,59 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Field parcel not found" }, { status: 404 });
   }
 
-  const cropName = selectedField.crop_name || "Cereal / Field Crop";
-  const soilPh = selectedField.soil_ph || 6.5;
-  const organicMatter = selectedField.organic_matter || 3.0;
-
-  // Rule-based heuristic decision engine logic
-  let fertilizerPlan = "";
-  let fertilizerRule = "";
-  let irrigationSchedule = "";
-  let irrigationRule = "";
-
-  // 1. Fertilizer Rule Matrix
-  if (body.crop_stage === "seedling") {
-    fertilizerRule = "Seedling Starter Nitrogen & Phosphorus Rule";
-    fertilizerPlan = `Apply high-phosphorus starter fertilizer 14-14-14 (Complete) at 60 kg/ha. ${
-      soilPh < 6.0 ? "Soil is acidic (pH " + soilPh + "); apply 250 kg/ha agricultural lime prior to top-dressing." : ""
-    }`;
-  } else if (body.crop_stage === "vegetative") {
-    fertilizerRule = "Vegetative Canopy Biomass High-Nitrogen Protocol";
-    if (body.observed_issues === "Leaf Yellowing (N-deficiency)") {
-      fertilizerPlan = `High Priority: Apply Urea (46-0-0) at 120 kg/ha split in 2 applications 10 days apart. Combine with MOP (0-0-60) at 40 kg/ha to reinforce stem structure.`;
-    } else {
-      fertilizerPlan = `Apply Urea (46-0-0) at 90 kg/ha + 16-20-0 at 50 kg/ha during side-dressing.`;
-    }
-  } else if (body.crop_stage === "flowering") {
-    fertilizerRule = "Reproductive Potassium & Micronutrient Augmentation Rule";
-    fertilizerPlan = `Apply Muriate of Potash (0-0-60) at 75 kg/ha alongside foliar Calcium-Boron spray to mitigate blossom drop and optimize fruit set.`;
-  } else {
-    fertilizerRule = "Pre-Harvest Nutrient Stabilization Rule";
-    fertilizerPlan = `Cease Nitrogen applications. Apply low-dose Potassium sulfate at 30 kg/ha if soil testing indicates K-depletion.`;
+  const cropName = selectedField.crop_name?.trim();
+  if (!cropName) {
+    return NextResponse.json({ error: "Assign a crop to this field before generating recommendations." }, { status: 400 });
+  }
+  const soilPh = selectedField.soil_ph;
+  const organicMatter = selectedField.organic_matter;
+  if (
+    !Number.isFinite(soilPh) || soilPh < 0 || soilPh > 14 ||
+    !Number.isFinite(organicMatter) || organicMatter < 0
+  ) {
+    return NextResponse.json({ error: "Add valid soil pH and organic matter values to this field before generating recommendations." }, { status: 400 });
   }
 
-  // 2. Irrigation Rule Matrix
-  if (body.rainfall_recent === "Heavy (>50mm)") {
-    irrigationRule = "Heavy Rainfall Moisture Saturation Rule";
-    irrigationSchedule = `Hold Irrigation: Recent rainfall exceeds field capacity. Open field drainage channels to prevent root asphyxiation. Resume monitoring when top 5cm soil dries.`;
-  } else if (body.rainfall_recent === "Moderate (25-50mm)") {
-    irrigationRule = "Moderate Moisture Maintenance Protocol";
-    irrigationSchedule = `Irrigate 1 to 2 times weekly at 15 liters/m² (${selectedField.water_source}). Adjust based on daily evapotranspiration rates.`;
+  const stage = body.crop_stage as "seedling" | "vegetative" | "flowering" | "mature";
+  const rainfallRecent = body.rainfall_recent as string;
+  const observedIssue = body.observed_issues || "None";
+  const stageGuidance = {
+    seedling: {
+      rule: "Seedling soil-test-led nutrient guidance",
+      advice: `For ${cropName} at the seedling stage, use starter nutrients only where soil-test results and crop-specific local guidance indicate a need; avoid placing concentrated fertilizer against seedlings.`,
+    },
+    vegetative: {
+      rule: "Vegetative crop nutrient guidance",
+      advice: `For ${cropName} during vegetative growth, base any nutrient top-dressing on crop-specific recommendations and soil-test results. Avoid applying fertilizer before heavy rain.`,
+    },
+    flowering: {
+      rule: "Flowering-stage nutrient guidance",
+      advice: `For ${cropName} during flowering, maintain balanced nutrition and apply additional nutrients only when crop-specific guidance or soil/plant testing supports it.`,
+    },
+    mature: {
+      rule: "Mature crop nutrient guidance",
+      advice: `For mature ${cropName}, avoid late nutrient applications unless a crop-specific recommendation calls for them; use soil-test results to plan post-harvest amendments.`,
+    },
+  }[stage];
+  const phTarget = selectedField.crop_ideal_ph_min !== undefined && selectedField.crop_ideal_ph_max !== undefined
+    ? `The catalog pH range for ${cropName} is ${selectedField.crop_ideal_ph_min}–${selectedField.crop_ideal_ph_max}; compare it with the recorded field pH (${soilPh}) before considering amendments.`
+    : `The crop catalog has no pH target for ${cropName}; use a soil test and local extension guidance before choosing an amendment.`;
+  const issueNote = body.observed_issues && body.observed_issues !== "None"
+    ? `Observed symptom: ${body.observed_issues}. Symptoms alone do not confirm a nutrient deficiency or pest diagnosis; verify with field inspection or testing before treatment.`
+    : "";
+  const fertilizerRule = stageGuidance.rule;
+  const fertilizerPlan = `${stageGuidance.advice} ${phTarget} Recorded organic matter: ${organicMatter}%. ${issueNote}`.trim();
+  let irrigationSchedule = "";
+  let irrigationRule = "";
+  if (rainfallRecent === "Heavy (>50mm)") {
+    irrigationRule = "Heavy rainfall and drainage check";
+    irrigationSchedule = `With heavy recent rainfall, pause scheduled irrigation and check root-zone moisture and drainage for ${cropName}. Resume only when the soil and crop water needs indicate it; recorded water source: ${selectedField.water_source}.`;
+  } else if (rainfallRecent === "Moderate (25-50mm)") {
+    irrigationRule = "Moderate rainfall moisture monitoring";
+    irrigationSchedule = `Check root-zone moisture before irrigating ${cropName}; supplement rainfall only when the crop's water needs and field conditions indicate a deficit. Use the catalog water requirement (${selectedField.crop_water_requirement || "not specified"}) as a seasonal reference, not a single-application rate. Recorded water source: ${selectedField.water_source}.`;
   } else {
-    irrigationRule = "Arid / Deficit Irrigation Compensatory Protocol";
-    irrigationSchedule = `Irrigate 3 to 4 times weekly at 25 liters/m². Apply mulch around crop root zones to conserve moisture loss.`;
+    irrigationRule = "Low rainfall water-deficit monitoring";
+    irrigationSchedule = `With low recent rainfall, check root-zone moisture more frequently and irrigate ${cropName} according to crop-specific seasonal water needs and local conditions. Mulch where appropriate to reduce evaporation. Use the catalog water requirement (${selectedField.crop_water_requirement || "not specified"}) as a seasonal reference, not a single-application rate. Recorded water source: ${selectedField.water_source}.`;
   }
 
   // Save fertilizer recommendation record
@@ -83,9 +109,9 @@ export async function POST(request: Request) {
     type: "fertilizer",
     rule_applied: fertilizerRule,
     output_text: fertilizerPlan,
-    crop_stage: body.crop_stage,
-    rainfall_recent: body.rainfall_recent,
-    observed_issues: body.observed_issues || "None"
+    crop_stage: stage,
+    rainfall_recent: rainfallRecent,
+    observed_issues: observedIssue
   });
 
   // Save irrigation recommendation record
@@ -96,9 +122,9 @@ export async function POST(request: Request) {
     type: "irrigation",
     rule_applied: irrigationRule,
     output_text: irrigationSchedule,
-    crop_stage: body.crop_stage,
-    rainfall_recent: body.rainfall_recent,
-    observed_issues: body.observed_issues || "None"
+    crop_stage: stage,
+    rainfall_recent: rainfallRecent,
+    observed_issues: observedIssue
   });
 
   return NextResponse.json({

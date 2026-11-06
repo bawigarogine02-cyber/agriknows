@@ -1,8 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { hashPassword } from "@/lib/auth/password";
-import { createSessionValue, sessionCookie, SessionUser } from "@/lib/auth/session";
-import { createUserRecord, findUserByEmail } from "@/lib/db/repository";
+import { addAuditLog, createAdminNotifications, createUserRecord, findUserByEmail } from "@/lib/db/repository";
+
+function isDuplicateEmailError(err: unknown): boolean {
+  if (typeof err !== "object" || err === null) return false;
+
+  return ("code" in err && err.code === "ER_DUP_ENTRY") || ("errno" in err && err.errno === 1062);
+}
 
 export async function POST(request: Request) {
   let body: { name?: string; email?: string; password?: string; confirmPassword?: string; role?: string; address?: string };
@@ -22,43 +27,53 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Provide a name, valid email, matching passwords, and at least six characters." }, { status: 400 });
   }
 
-  const existingUser = await findUserByEmail(email);
-  if (existingUser) {
-    return NextResponse.json({ error: "That email address is already registered." }, { status: 409 });
-  }
-
   const roleInput = body.role?.toLowerCase();
   const assignedRole: "farmer" | "researcher" = roleInput === "researcher" ? "researcher" : "farmer";
 
-  const userId = randomUUID();
-  const password_hash = await hashPassword(password);
-
   try {
+    const existingUser = await findUserByEmail(email);
+    if (existingUser) {
+      return NextResponse.json({ error: "That email address is already registered." }, { status: 409 });
+    }
+
+    const userId = randomUUID();
+    const password_hash = await hashPassword(password);
     await createUserRecord({
       id: userId,
       name,
       email,
       role: assignedRole,
-      status: "active",
+      status: "pending",
       password_hash,
       address,
     });
+    try {
+      await addAuditLog(userId, "Registered Account", "users", `Registered a pending ${assignedRole} account`);
+    } catch (auditError) {
+      console.error("Registration audit event could not be saved:", auditError);
+    }
+    try {
+      await createAdminNotifications(
+        "Account awaiting approval",
+        `${name} registered as a ${assignedRole} and needs account review.`
+      );
+    } catch (notificationError) {
+      console.error("Registration notification could not be saved:", notificationError);
+    }
 
-    const sessionUser: SessionUser = {
-      id: userId,
-      name,
-      email,
-      role: assignedRole,
-      status: "active",
-      address,
-      needsOnboarding: false,
-    };
-
-    const response = NextResponse.json({ user: sessionUser }, { status: 201 });
-    response.cookies.set(sessionCookie.name, createSessionValue(sessionUser), sessionCookie.options);
-    return response;
+    return NextResponse.json(
+      { status: "pending", message: "Your account was created and is awaiting administrator approval." },
+      { status: 201 }
+    );
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Failed to complete account registration.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    if (isDuplicateEmailError(err)) {
+      return NextResponse.json({ error: "That email address is already registered." }, { status: 409 });
+    }
+
+    console.error("Account registration failed:", err);
+    return NextResponse.json(
+      { error: "We couldn't save your account. Please try again later." },
+      { status: 500 }
+    );
   }
 }

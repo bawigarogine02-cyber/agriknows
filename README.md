@@ -70,7 +70,7 @@ Then open http://localhost:3000
 
 ## Planting Advisor setup
 
-1. Create a MySQL database and run `database/migrations/001_planting_advisor.sql`, followed by `database/migrations/002_dashboard.sql`, `database/migrations/003_admin_access.sql`, `database/migrations/004_site_settings.sql`, `database/migrations/005_agrikms_modules.sql`, and finally `database/migrations/006_constraints.sql`.
+1. Create a MySQL database with the base `users`, `locations`, and `crops` tables, then apply the available schema migrations in order through `database/migrations/012_user_approval.sql`. Migration 001 is not included in this checkout, so verify the base tables exist before applying migration 002. Migrations 009–011 add profile/catalog/preferences fields; migration 012 adds pending and rejected user-account approval states.
 2. Copy `.env.example` to `.env.local` and set `DATABASE_URL` and a long random `SESSION_SECRET`.
 3. Register or log in through `/register` or `/login`. Authentication uses the `users` table, hashed passwords, and an HTTP-only session cookie.
 4. Add `GEMINI_API_KEY` to enable the constrained Gemini 3 Flash image observation step. Crop scoring remains deterministic and uses the structured requirements in the database.
@@ -79,13 +79,18 @@ The dashboard migration keeps the data relational: users own farms, farms contai
 
 ## Admin dashboard
 
-The protected admin workspace is available at `/admin`. New registrations are always created as regular users. After registering the intended administrator, promote that account explicitly in MySQL:
+The protected admin workspace is available at `/admin`. Farmer and agricultural researcher registrations are created as pending accounts and require admin approval. Provision the initial administrator by promoting that account explicitly in MySQL:
 
 ```sql
 UPDATE users SET role = 'admin' WHERE email = 'admin@example.com';
 ```
 
-Admin APIs enforce the role server-side. The admin workspace currently provides database-backed overview metrics, user search/pagination/role/status management, relational entity views, and SEO settings that feed the root metadata, sitemap, and robots output.
+The optional `scripts/seed.js` utility can initialize the crop catalog, but it does not create default user accounts or passwords. It accepts `DATABASE_URL` or the individual `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, and `DB_PORT` settings.
 
-The `/planting-advisor` page and `/api/planting-advisor` endpoints require the signed HTTP-only session cookie created by the login or registration routes. Analysis queries are scoped to that authenticated user. Open-Meteo and Gemini requests are made server-side; no API key is sent to the browser.
+Admin APIs enforce the role server-side. The admin workspace provides database-backed overview metrics, user search/pagination/role/status management, relational entity views, and SEO settings that feed the root metadata, sitemap, and robots output. Audit activity is recorded for farm and field changes, recommendations, consultations, publications, crop catalog changes, and account administration; the audit feed refreshes every 30 seconds.
 
+Researchers can add crop catalog entries and publish agricultural research. Crop deletion is admin-only. New field entries require the farmer to enter soil pH, organic matter, and water source rather than saving assumed agronomic values. Decision-support output uses saved field and crop data, recent rainfall, and crop stage; it is guidance rather than a substitute for soil testing or local extension recommendations. CSV exports apply the selected report filters and quote/escape cell content.
+
+Farmers can update their profile and password, edit farm and field details, or delete their own farm/field records. Field areas are constrained by their farm's recorded total area. Authenticated requests re-check the account's current active status and role against the database, so suspending or deleting an account invalidates its existing session. The admin reports page summarizes stored account, farm, field, crop, knowledge, consultation, recommendation, analysis, publication, and audit-log totals; audit events cover important authentication, profile, settings, farm/field, consultation, recommendation, research, and admin-account changes.
+
+The `/crop-advisor` and `/api/crop-advisor` endpoints require the signed HTTP-only session cookie created by the login or registration routes. Analysis queries are scoped to that authenticated user. Open-Meteo and Gemini requests are made server-side; no API key is sent to the browser.

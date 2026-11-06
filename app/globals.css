@@ -38,15 +38,10 @@ body {
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }
 
-/* Keep supporting copy and controls readable across every page. */
-.text-xs,
-.text-sm,
-[class*="text-[9px]"],
-[class*="text-[10px]"],
-[class*="text-[11px]"],
-[class*="text-[12px]"],
-[class*="text-[13px]"] {
-  font-size: 1rem !important;
+:where([role="dialog"]:not(.fixed)) {
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 ::selection {

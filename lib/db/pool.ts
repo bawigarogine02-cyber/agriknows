@@ -8,7 +8,9 @@ export function getDb() {
   const databaseUser = process.env.DB_USER;
   const databaseHost = process.env.DB_HOST;
 
-  if (!databaseUrl && (!databaseName || !databaseUser || !databaseHost)) return null;
+  if (!databaseUrl && (!databaseName || !databaseUser || !databaseHost)) {
+    throw new Error("Database is not configured. Set DATABASE_URL or DB_HOST, DB_NAME, and DB_USER.");
+  }
 
   pool ??= databaseUrl
     ? mysql.createPool(databaseUrl)

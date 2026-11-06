@@ -14,8 +14,8 @@ interface PublishResearchModalProps {
 export default function PublishResearchModal({ isOpen, crops, onClose, onSuccess }: PublishResearchModalProps) {
   const [title, setTitle] = useState("");
   const [abstract, setAbstract] = useState("");
-  const [cropType, setCropType] = useState(crops[0]?.name || "Maize (Corn)");
-  const [soilType, setSoilType] = useState("Loam / Clay Loam");
+  const [cropType, setCropType] = useState(crops[0]?.name || "");
+  const [soilType, setSoilType] = useState("");
   const [pdfUrl, setPdfUrl] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -40,7 +40,7 @@ export default function PublishResearchModal({ isOpen, crops, onClose, onSuccess
           abstract: abstract.trim(),
           crop_type: cropType,
           soil_type: soilType,
-          pdf_url: pdfUrl.trim() || "#"
+          pdf_url: pdfUrl.trim()
         })
       });
 
@@ -67,7 +67,7 @@ export default function PublishResearchModal({ isOpen, crops, onClose, onSuccess
               <BookOpen size={22} />
             </div>
             <div>
-              <h2 className="text-xl font-extrabold text-[#123d35]">Publish Research Paper (Researcher View)</h2>
+              <h2 className="text-xl font-extrabold text-[#123d35]">Publish Agricultural Research Paper</h2>
               <p className="text-xs text-slate-500">Contribute peer-reviewed agricultural findings.</p>
             </div>
           </div>
@@ -94,10 +94,12 @@ export default function PublishResearchModal({ isOpen, crops, onClose, onSuccess
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">Target Crop Type *</label>
               <select
+                required
                 value={cropType}
                 onChange={(e) => setCropType(e.target.value)}
                 className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm font-semibold text-slate-800 outline-none focus:border-[#16875f]"
               >
+                {!cropType && <option value="" disabled>Select a crop</option>}
                 {crops.map((c) => (
                   <option key={c.id} value={c.name}>
                     {c.name}

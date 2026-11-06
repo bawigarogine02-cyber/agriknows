@@ -1,38 +1,29 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { getAccurateUserLocation } from "@/lib/utils/geolocation";
+import type {
+  Article,
+  Crop,
+  Field,
+  Recommendation,
+  StoredWeatherSnapshot,
+} from "@/lib/db/repository";
 import {
   Activity,
-  AlertCircle,
   ArrowRight,
   BookOpen,
-  Calendar,
   Check,
-  CheckCircle2,
   Cloud,
   CloudRain,
   CloudSun,
-  Compass,
   Droplets,
-  ExternalLink,
-  Eye,
-  FileText,
-  Filter,
   Flower2,
-  HeartPulse,
-  Info,
-  Leaf,
   Lightbulb,
-  MapPin,
   MessageSquare,
   Plus,
-  RefreshCw,
-  Sparkles,
   Sprout,
   Sun,
-  Thermometer,
   Wind,
   X,
   Zap,
@@ -64,146 +55,92 @@ type ActiveModal =
   | "weatherDetail"
   | "reports";
 
-export default function DashboardHome() {
+type DashboardHomeProps = {
+  initialFields: Field[];
+  recommendations: Recommendation[];
+  articles: Article[];
+  initialCrops: Crop[];
+  weatherSnapshot: StoredWeatherSnapshot | null;
+};
+
+export default function DashboardHome({
+  initialFields,
+  recommendations,
+  articles,
+  initialCrops,
+  weatherSnapshot,
+}: DashboardHomeProps) {
   const router = useRouter();
 
   // Active modal state
   const [activeModal, setActiveModal] = useState<ActiveModal>(null);
-
-  // Stats state
-  const [stats, setStats] = useState({
-    activeCrops: 4,
-    recommendations: 2,
-    knowledgeArticles: 3,
-    farmHealth: 92,
-    healthLabel: "Excellent",
-    topCrop: "Maize (Corn)",
-  });
-
-  // Weather state
-  const [weather, setWeather] = useState<WeatherState>({
-    temp: 28,
-    humidity: 74,
-    rainfall: 0,
-    wind: 12,
-    location: "Laray, Talisay City, Cebu, Philippines",
-    condition: "Partly Cloudy",
-    solarRadiation: 420,
-    soilTemperature: 26.5,
-    loading: true,
-  });
+  const fields = initialFields;
+  const [crops, setCrops] = useState(initialCrops);
+  const activeFields = fields.filter((field) => !field.is_harvested);
+  const stats = {
+    activeCrops: activeFields.length,
+    recommendations: recommendations.length,
+    knowledgeArticles: articles.length,
+    fieldRecords: fields.length,
+    cropCatalog: crops.length,
+  };
+  const latestArticle = articles[0];
+  const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
+  const displayedArticle = selectedArticle || latestArticle;
+  const featuredField = activeFields[0];
+  const weather: WeatherState = {
+    temp: weatherSnapshot?.temperature_c ?? null,
+    humidity: weatherSnapshot?.humidity_percent ?? null,
+    rainfall: weatherSnapshot?.rainfall_probability_percent ?? null,
+    wind: weatherSnapshot?.wind_kph ?? null,
+    location: weatherSnapshot?.location || "",
+    condition: weatherSnapshot?.condition_label || "",
+    solarRadiation: null,
+    soilTemperature: null,
+    loading: false,
+  };
 
   // New crop form state for Add Crop Quick Action
   const [newCropForm, setNewCropForm] = useState({
     name: "",
-    type: "Compact Bush Legume",
-    category: "Legumes",
-    days: 1,
+    type: "",
+    category: "",
     notes: "",
   });
   const [formSuccess, setFormSuccess] = useState("");
+  const [formError, setFormError] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
 
-  useEffect(() => {
-    // 1. Fetch system statistics from real API endpoints (fields, advisor analyses, knowledge base)
-    Promise.all([
-      fetch("/api/fields").then((r) => (r.ok ? r.json() : null)),
-      fetch("/api/reports").then((r) => (r.ok ? r.json() : null)),
-      fetch("/api/knowledge-base").then((r) => (r.ok ? r.json() : null)),
-    ])
-      .then(([fieldsData, advisorData, kbData]) => {
-        let activeCropsCount = 4;
-        if (fieldsData?.fields && Array.isArray(fieldsData.fields)) {
-          const activeFields = fieldsData.fields.filter((f: { is_harvested?: boolean }) => !f.is_harvested);
-          activeCropsCount = activeFields.length > 0 ? activeFields.length : fieldsData.fields.length;
-        }
-
-        let totalRecs = 2;
-        let sumScore = 0;
-        let scoreCount = 0;
-        let topCropName = "Maize (Corn)";
-
-        if (advisorData?.analyses && Array.isArray(advisorData.analyses)) {
-          let advisorRecCount = 0;
-          advisorData.analyses.forEach((a: { recommendations?: Array<{ score: number; name: string }> }) => {
-            if (Array.isArray(a.recommendations)) {
-              advisorRecCount += a.recommendations.length;
-              if (a.recommendations[0]?.name) {
-                topCropName = a.recommendations[0].name;
-              }
-              a.recommendations.forEach((rec) => {
-                sumScore += rec.score;
-                scoreCount++;
-              });
-            }
-          });
-          if (advisorRecCount > 0) {
-            totalRecs = 2 + advisorRecCount;
-          }
-        }
-
-        let kbArticlesCount = 3;
-        if (kbData?.articles && Array.isArray(kbData.articles)) {
-          kbArticlesCount = kbData.articles.length;
-        }
-
-        const avgScore = scoreCount > 0 ? Math.round(sumScore / scoreCount) : 92;
-        let healthLabel = "Excellent";
-        if (avgScore >= 90) healthLabel = "Excellent";
-        else if (avgScore >= 75) healthLabel = "Good";
-        else healthLabel = "Moderate";
-
-        setStats({
-          activeCrops: activeCropsCount,
-          recommendations: totalRecs,
-          knowledgeArticles: kbArticlesCount,
-          farmHealth: avgScore,
-          healthLabel,
-          topCrop: topCropName,
-        });
-      })
-      .catch(() => {});
-
-    // 2. Fetch Live Weather Data using Geolocation API
-    getAccurateUserLocation().then((loc) => {
-      fetch(
-        `https://api.open-meteo.com/v1/forecast?latitude=${loc.latitude}&longitude=${loc.longitude}&current=temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,shortwave_radiation,weather_code&hourly=soil_temperature_0cm&timezone=auto`
-      )
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data) => {
-          if (!data?.current) return;
-          const code = data.current.weather_code ?? 0;
-          let cond = "Partly Cloudy";
-          if (code === 0) cond = "Clear Sky";
-          else if (code <= 3) cond = "Partly Cloudy";
-          else if (code <= 65) cond = "Rain Showers";
-          else cond = "Overcast";
-
-          setWeather({
-            temp: Math.round(data.current.temperature_2m ?? 28),
-            humidity: Math.round(data.current.relative_humidity_2m ?? 74),
-            rainfall: Number((data.current.precipitation ?? 0).toFixed(1)),
-            wind: Math.round(data.current.wind_speed_10m ?? 12),
-            solarRadiation: Math.round(data.current.shortwave_radiation ?? 420),
-            soilTemperature: Number((data.hourly?.soil_temperature_0cm?.[0] ?? 26.5).toFixed(1)),
-            location: loc.locationName,
-            condition: cond,
-            loading: false,
-          });
-        })
-        .catch(() => setWeather((w) => ({ ...w, loading: false })));
-    });
-  }, []);
-
-  const handleAddCropSubmit = (e: React.FormEvent) => {
+  const handleAddCropSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCropForm.name.trim()) return;
-    setStats((prev) => ({ ...prev, activeCrops: prev.activeCrops + 1 }));
-    setFormSuccess(`Successfully added ${newCropForm.name} to your active crops!`);
-    setTimeout(() => {
+    setFormError("");
+    setIsSaving(true);
+    try {
+      const response = await fetch("/api/crops", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: newCropForm.name.trim(),
+        type: newCropForm.type,
+        category: newCropForm.category,
+        detail: newCropForm.notes.trim(),
+      }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Unable to save the crop.");
+      setCrops((current) => [result.crop as Crop, ...current]);
+      setFormSuccess(`Successfully added ${newCropForm.name} to the crop library.`);
+      window.setTimeout(() => {
       setFormSuccess("");
-      setNewCropForm({ name: "", type: "Compact Bush Legume", category: "Legumes", days: 1, notes: "" });
+      setNewCropForm({ name: "", type: "", category: "", notes: "" });
       setActiveModal(null);
-    }, 1500);
+      }, 1500);
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Unable to save the crop.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -258,12 +195,12 @@ export default function DashboardHome() {
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_10%,#75c0d2,transparent_38%),linear-gradient(135deg,#267c95,#84bc87)] opacity-90" />
             <div className="relative z-10">
               <div className="flex items-center justify-between">
-                <h2 className="text-base font-bold">Today&apos;s Weather</h2>
+                <h2 className="text-base font-bold">Latest Stored Weather</h2>
                 <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-bold text-white backdrop-blur-md">
                   Click for details
                 </span>
               </div>
-              <p className="mt-1 text-xs text-white/80">⌖ {weather.location}</p>
+              <p className="mt-1 text-xs text-white/80">{weather.location || "No location recorded"}</p>
               <div className="mt-4 flex items-center gap-3">
                 {weather.condition.includes("Clear") ? (
                   <Sun size={40} className="text-amber-300" strokeWidth={1.5} />
@@ -274,10 +211,10 @@ export default function DashboardHome() {
                 )}
                 <div>
                   <strong className="text-3xl font-extrabold leading-none">
-                    {weather.loading ? "--" : `${weather.temp}°C`}
+                    {weather.temp === null ? "--" : `${weather.temp}°C`}
                   </strong>
                   <p className="mt-1 text-xs text-white/90">
-                    {weather.loading ? "Updating..." : weather.condition}
+                    {weather.condition || "No stored weather data"}
                   </p>
                 </div>
               </div>
@@ -291,8 +228,8 @@ export default function DashboardHome() {
             </div>
             <div>
               <CloudRain className="mx-auto text-[#4b9e9a]" size={17} />
-              <p className="mt-1 text-[10px] text-slate-500">Rainfall</p>
-              <strong className="text-xs">{weather.rainfall ?? 0} mm</strong>
+              <p className="mt-1 text-[10px] text-slate-500">Rain chance</p>
+              <strong className="text-xs">{weather.rainfall === null ? "--" : `${weather.rainfall}%`}</strong>
             </div>
             <div>
               <Wind className="mx-auto text-[#4b9e9a]" size={17} />
@@ -327,7 +264,7 @@ export default function DashboardHome() {
             <div>
               <p className="text-xs font-semibold text-slate-500">Active Crops</p>
               <strong className="block text-2xl font-bold leading-7 text-[#123d35]">{stats.activeCrops}</strong>
-              <small className="text-[10px] font-semibold text-[#288b69]">↑ 2 since last month</small>
+              <small className="text-[10px] font-semibold text-[#288b69]">From your field records</small>
             </div>
           </div>
         </article>
@@ -344,7 +281,7 @@ export default function DashboardHome() {
             <div>
               <p className="text-xs font-semibold text-slate-500">Recommendations</p>
               <strong className="block text-2xl font-bold leading-7 text-[#123d35]">{stats.recommendations}</strong>
-              <small className="text-[10px] font-semibold text-[#6478d0]">↑ 3 since last week</small>
+              <small className="text-[10px] font-semibold text-[#6478d0]">From your saved records</small>
             </div>
           </div>
         </article>
@@ -361,30 +298,24 @@ export default function DashboardHome() {
             <div>
               <p className="text-xs font-semibold text-slate-500">Knowledge Articles</p>
               <strong className="block text-2xl font-bold leading-7 text-[#123d35]">{stats.knowledgeArticles}</strong>
-              <small className="text-[10px] font-semibold text-[#815cc6]">↑ 5 since last month</small>
+              <small className="text-[10px] font-semibold text-[#815cc6]">Available in the knowledge base</small>
             </div>
           </div>
         </article>
 
-        {/* Card 5: Farm Health */}
+        {/* Card 5: Field Records */}
         <article
           onClick={() => setActiveModal("farmHealth")}
           className="group cursor-pointer rounded-2xl bg-white p-5 shadow-sm transition hover:shadow-md hover:border-[#1b9b70]/50 border border-slate-100"
         >
           <div className="flex items-center gap-3">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#fff1d5] text-[#c49229] group-hover:bg-[#c49229] group-hover:text-white transition">
-              <HeartPulse size={24} />
+              <Activity size={24} />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-xs font-semibold text-slate-500">Farm Health</p>
-              <strong className="block text-2xl font-bold leading-7 text-[#123d35]">{stats.farmHealth}%</strong>
-              <div className="mt-2 h-1.5 w-full rounded-full bg-slate-200">
-                <div
-                  className="h-full rounded-full bg-[#1b9b70] transition-all duration-500"
-                  style={{ width: `${stats.farmHealth}%` }}
-                />
-              </div>
-              <small className="text-[10px] font-semibold text-[#1b9b70]">{stats.healthLabel}</small>
+              <p className="text-xs font-semibold text-slate-500">Field Records</p>
+              <strong className="block text-2xl font-bold leading-7 text-[#123d35]">{stats.fieldRecords}</strong>
+              <small className="text-[10px] font-semibold text-[#1b9b70]">{stats.cropCatalog} crops in the database catalog</small>
             </div>
           </div>
         </article>
@@ -406,25 +337,28 @@ export default function DashboardHome() {
               View All <ArrowRight size={13} />
             </button>
           </div>
-          <div
-            onClick={() => setActiveModal("latestKnowledge")}
-            className="flex cursor-pointer gap-4 p-5 transition hover:bg-[#f8fcf9]"
-          >
-            <div className="flex h-[88px] w-[95px] shrink-0 items-center justify-center rounded-xl bg-[#e0f5eb] text-[#25805e]">
-              <BookOpen size={32} strokeWidth={1.8} />
+          {latestArticle ? (
+            <div
+              onClick={() => {
+                setSelectedArticle(latestArticle);
+                setActiveModal("latestKnowledge");
+              }}
+              className="flex cursor-pointer gap-4 p-5 transition hover:bg-[#f8fcf9]"
+            >
+              <div className="flex h-[88px] w-[95px] shrink-0 items-center justify-center rounded-xl bg-[#e0f5eb] text-[#25805e]">
+                <BookOpen size={32} strokeWidth={1.8} />
+              </div>
+              <div className="min-w-0">
+                <span className="inline-flex rounded-full bg-[#e0f5eb] px-2.5 py-1 text-[10px] font-bold text-[#25805e]">
+                  {latestArticle.category}
+                </span>
+                <h3 className="mt-2 text-sm font-bold text-[#123d35]">{latestArticle.title}</h3>
+                <p className="mt-1 text-xs text-slate-500 line-clamp-2">{latestArticle.summary}</p>
+              </div>
             </div>
-            <div className="min-w-0">
-              <span className="inline-flex rounded-full bg-[#e0f5eb] px-2.5 py-1 text-[10px] font-bold text-[#25805e]">
-                Crop Management
-              </span>
-              <h3 className="mt-2 text-sm font-bold text-[#123d35]">
-                Best Practices for Rice & Legume Cultivation
-              </h3>
-              <p className="mt-1 text-xs text-slate-500 line-clamp-2">
-                Learn how to improve soil nitrogen, manage crop rotation, and maintain healthy plant yields.
-              </p>
-            </div>
-          </div>
+          ) : (
+            <p className="p-5 text-xs text-slate-500">No knowledge articles are available.</p>
+          )}
         </article>
 
         {/* Card 7: My Crops */}
@@ -449,19 +383,15 @@ export default function DashboardHome() {
               <Flower2 size={28} strokeWidth={1.8} />
             </div>
             <div className="min-w-0 flex-1">
-              <div className="flex items-start justify-between gap-2">
-                <h3 className="text-sm font-bold text-[#123d35] truncate max-w-[150px]">{stats.topCrop.split("(")[0]}</h3>
-                <span className="rounded-full bg-[#e0f5eb] px-2 py-0.5 text-[10px] font-bold text-[#25805e]">
-                  Healthy
-                </span>
-              </div>
-              <p className="mt-1 text-xs text-slate-400">Growing · 68 days</p>
-              <div className="mt-3 flex items-center gap-2">
-                <div className="h-1.5 flex-1 rounded-full bg-slate-200">
-                  <div className="h-full w-[78%] rounded-full bg-[#20956d]" />
-                </div>
-                <span className="text-[10px] font-bold text-slate-500">78%</span>
-              </div>
+              <h3 className="text-sm font-bold text-[#123d35] truncate max-w-[180px]">
+                {featuredField?.crop_name || "No active crop records"}
+              </h3>
+              <p className="mt-1 text-xs text-slate-400">
+                {featuredField ? `${featuredField.name} · ${featuredField.area} ha` : "Add a field to track crops"}
+              </p>
+              {featuredField?.planting_date && (
+                <p className="mt-1 text-xs text-slate-400">Planted {featuredField.planting_date}</p>
+              )}
             </div>
           </div>
         </article>
@@ -550,23 +480,19 @@ export default function DashboardHome() {
             </div>
 
             <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
-              {[
-                { name: "Bush Green Beans (Phaseolus vulgaris)", stage: "Growing · 45 days", health: "Healthy", score: 94 },
-                { name: "Yardlong / Pole Beans (Sitaw)", stage: "Flowering · 52 days", health: "Healthy", score: 92 },
-                { name: "Cowpeas & Black-Eyed Peas", stage: "Established · 38 days", health: "Healthy", score: 88 },
-                { name: "Mung Beans (Mungo)", stage: "Harvest Ready · 58 days", health: "Harvest Ready", score: 95 },
-                { name: "Soybeans (Glycine max)", stage: "Growing · 40 days", health: "Healthy", score: 90 },
-              ].map((c) => (
-                <div key={c.name} className="flex items-center justify-between rounded-xl bg-slate-50 p-4 border border-slate-100">
+              {activeFields.length ? activeFields.map((field) => (
+                <div key={field.id} className="flex items-center justify-between rounded-xl bg-slate-50 p-4 border border-slate-100">
                   <div>
-                    <strong className="block text-sm text-[#123d35]">{c.name}</strong>
-                    <span className="text-xs text-slate-500">{c.stage}</span>
+                    <strong className="block text-sm text-[#123d35]">{field.crop_name || field.name}</strong>
+                    <span className="text-xs text-slate-500">{field.name} · {field.area} ha</span>
                   </div>
                   <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-800">
-                    {c.health}
+                    Active
                   </span>
                 </div>
-              ))}
+              )) : (
+                <p className="rounded-xl bg-slate-50 p-4 text-xs text-slate-500">No active field records are available.</p>
+              )}
             </div>
 
             <div className="flex items-center justify-between border-t border-slate-100 pt-4">
@@ -619,21 +545,19 @@ export default function DashboardHome() {
             </div>
 
             <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1 text-xs">
-              {[
-                { name: "Bush Green Beans (Phaseolus vulgaris)", type: "Compact Bush Legume", score: 94, reason: "Self-supporting 45-60 day bush bean. Thrives in loose well-drained loam." },
-                { name: "Yardlong / Pole Beans (Sitaw)", type: "Climbing Vertical Legume", score: 92, reason: "High-yield vertical climber for bamboo trellises. Excellent heat tolerance." },
-                { name: "Mung Beans (Mungo)", type: "Fast 60-Day Short-Cycle Legume", score: 90, reason: "Ultra-fast crop cycle requiring minimal irrigation." },
-                { name: "Soybeans (Glycine max)", type: "High-Protein Grain Legume", score: 88, reason: "Requires deep, moist fertile loam. Restores depleted land nitrogen." },
-              ].map((rec, i) => (
-                <div key={rec.name} className="rounded-xl border border-slate-100 bg-[#fafcf9] p-4 space-y-1">
+              {recommendations.length ? recommendations.map((rec, i) => (
+                <div key={rec.id} className="rounded-xl border border-slate-100 bg-[#fafcf9] p-4 space-y-1">
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-[#9a621e]">#{i + 1} Recommendation</span>
-                    <strong className="text-base text-[#16875f]">{rec.score}/100</strong>
+                    <strong className="text-sm capitalize text-[#16875f]">{rec.type}</strong>
                   </div>
-                  <h3 className="font-bold text-[#123d35] text-sm">{rec.name}</h3>
-                  <p className="text-slate-500">{rec.reason}</p>
+                  <h3 className="font-bold text-[#123d35] text-sm">{rec.crop_name || rec.field_name || "Field recommendation"}</h3>
+                  <p className="text-slate-500">{rec.output_text}</p>
+                  {rec.field_name && <p className="text-slate-400">Field: {rec.field_name}</p>}
                 </div>
-              ))}
+              )) : (
+                <p className="rounded-xl bg-slate-50 p-4 text-slate-500">No recommendations are saved for your account.</p>
+              )}
             </div>
 
             <div className="flex items-center justify-between border-t border-slate-100 pt-4">
@@ -679,15 +603,11 @@ export default function DashboardHome() {
             </div>
 
             <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1 text-xs">
-              {[
-                { title: "Best Practices for Rice & Legume Cultivation", category: "Crop Management", desc: "Seed selection, water management, split nitrogen application." },
-                { title: "Nitrogen Fixation & Legume Crop Rotation", category: "Soil Health", desc: "Restoring depleted nitrogen with bush green beans, sitaw, and mung beans." },
-                { title: "Managing Soil Moisture & Field Drainage", category: "Field Guide", desc: "Hand feel test, raised bed elevation, perimeter drainage ditches." },
-                { title: "Early Field Scouting & Integrated Pest Management", category: "Pest Control", desc: "Scouting Z-patterns, beneficial predator protection, neem spray." },
-              ].map((art) => (
+              {articles.length ? articles.map((art) => (
                 <div
-                  key={art.title}
+                  key={art.id}
                   onClick={() => {
+                    setSelectedArticle(art);
                     setActiveModal("latestKnowledge");
                   }}
                   className="cursor-pointer rounded-xl border border-slate-100 bg-[#fafcf9] p-4 transition hover:border-[#815cc6]/40"
@@ -696,9 +616,9 @@ export default function DashboardHome() {
                     {art.category}
                   </span>
                   <h3 className="mt-1.5 font-bold text-[#123d35] text-sm">{art.title}</h3>
-                  <p className="mt-1 text-slate-500">{art.desc}</p>
+                  <p className="mt-1 text-slate-500">{art.summary}</p>
                 </div>
-              ))}
+              )) : <p className="rounded-xl bg-slate-50 p-4 text-slate-500">No knowledge articles are available.</p>}
             </div>
 
             <div className="flex justify-end border-t border-slate-100 pt-4">
@@ -732,7 +652,7 @@ export default function DashboardHome() {
           >
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h2 className="text-xl font-bold text-[#123d35] flex items-center gap-2">
-                <HeartPulse className="text-[#c49229]" size={22} /> Farm Health Status ({stats.farmHealth}%)
+                <Activity className="text-[#c49229]" size={22} /> Field Records ({stats.fieldRecords})
               </h2>
               <button
                 type="button"
@@ -744,31 +664,19 @@ export default function DashboardHome() {
             </div>
 
             <div className="space-y-4 text-xs">
-              <div className="rounded-xl bg-emerald-50 p-4 border border-emerald-100 text-emerald-800">
-                <strong className="block text-sm">Status: {stats.healthLabel} ({stats.farmHealth}%)</strong>
-                <p className="mt-1 leading-relaxed">
-                  Your field soil moisture, solar radiation exposure, and weather suitability indicate a prime window for planting legume crops.
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span>Soil Moisture Fit</span>
-                  <strong className="text-emerald-700">95%</strong>
+              {fields.length ? fields.map((field) => (
+                <div key={field.id} className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                  <strong className="block text-sm text-[#123d35]">{field.name}</strong>
+                  <p className="mt-1 text-slate-500">{field.farm_name} · {field.area} ha</p>
+                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-slate-600">
+                    <span>Soil pH: {Number.isFinite(field.soil_ph) ? field.soil_ph : "Not recorded"}</span>
+                    <span>Organic matter: {Number.isFinite(field.organic_matter) ? `${field.organic_matter}%` : "Not recorded"}</span>
+                    <span>Water source: {field.water_source || "Not recorded"}</span>
+                  </div>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span>Temperature Suitability</span>
-                  <strong className="text-emerald-700">90%</strong>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>Weather Hazard Exposure</span>
-                  <strong className="text-emerald-700">Low Hazard</strong>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>Soil Nitrogen Level</span>
-                  <strong className="text-emerald-700">High (Legume rotation)</strong>
-                </div>
-              </div>
+              )) : (
+                <p className="rounded-xl bg-slate-50 p-4 text-slate-500">No field records are available.</p>
+              )}
             </div>
 
             <div className="flex justify-end border-t border-slate-100 pt-4">
@@ -803,10 +711,10 @@ export default function DashboardHome() {
             <header className="flex items-start justify-between border-b border-slate-100 bg-[#f8fbf7] px-6 py-5">
               <div>
                 <span className="rounded-md bg-[#e0f5eb] px-2.5 py-1 text-xs font-bold text-[#25805e]">
-                  Crop Management Guide
+                  {displayedArticle?.category || "Knowledge Article"}
                 </span>
                 <h2 className="mt-2 text-2xl font-bold text-[#123d35]">
-                  Best Practices for Rice & Legume Cultivation
+                  {displayedArticle?.title || "No article selected"}
                 </h2>
               </div>
               <button
@@ -818,17 +726,23 @@ export default function DashboardHome() {
               </button>
             </header>
 
-            <div className="space-y-4 overflow-y-auto p-6 text-xs sm:text-sm leading-relaxed text-slate-700">
-              <p className="bg-slate-50 p-4 rounded-xl font-medium border border-slate-100 text-slate-800">
-                Learn how to improve soil nitrogen, manage crop rotation between rice and bush beans, and maximize seasonal yields.
-              </p>
-
-              <ol className="list-decimal space-y-2 pl-5">
-                <li>Select certified bush green bean or rice varieties suited to loamy, well-drained field conditions.</li>
-                <li>Prepare sloped ridges or raised beds (15-20 cm high) to avoid waterlogging during heavy rain.</li>
-                <li>Maintain split nitrogen fertilizer applications to avoid nutrient leaching.</li>
-                <li>Harvest green bean pods frequently every 2-3 days to encourage continuous blooming.</li>
-              </ol>
+            <div className="space-y-4 overflow-y-auto whitespace-pre-wrap p-6 text-xs leading-relaxed text-slate-700 sm:text-sm">
+              {displayedArticle ? (
+                <>
+                  <p className="rounded-xl border border-slate-100 bg-slate-50 p-4 font-medium text-slate-800">
+                    {displayedArticle.summary}
+                  </p>
+                  <p>{displayedArticle.body}</p>
+                  {displayedArticle.evidence_note && <p>Evidence: {displayedArticle.evidence_note}</p>}
+                  {displayedArticle.source_url && (
+                    <a className="text-[#16875f] underline" href={displayedArticle.source_url} target="_blank" rel="noreferrer">
+                      View source
+                    </a>
+                  )}
+                </>
+              ) : (
+                <p>No knowledge article is available.</p>
+              )}
             </div>
 
             <footer className="flex justify-end border-t border-slate-100 bg-slate-50 px-6 py-4">
@@ -859,7 +773,7 @@ export default function DashboardHome() {
           >
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h2 className="text-xl font-bold text-[#123d35] flex items-center gap-2">
-                <Flower2 className="text-[#16875f]" size={22} /> Active Crop Profile: {stats.topCrop.split("(")[0]}
+                <Flower2 className="text-[#16875f]" size={22} /> Active Crop Profile: {featuredField?.crop_name || "No active crop"}
               </h2>
               <button
                 type="button"
@@ -871,24 +785,17 @@ export default function DashboardHome() {
             </div>
 
             <div className="space-y-3 text-xs">
-              <div className="rounded-xl bg-slate-50 p-4 border border-slate-100 space-y-2">
-                <div className="flex justify-between">
-                  <span className="font-bold text-slate-700">Growth Stage:</span>
-                  <span className="font-bold text-[#16875f]">Growing · 68 days</span>
+              {featuredField ? (
+                <div className="rounded-xl bg-slate-50 p-4 text-xs border border-slate-100">
+                  <p><strong>Field:</strong> {featuredField.name}</p>
+                  <p className="mt-2"><strong>Farm:</strong> {featuredField.farm_name}</p>
+                  <p className="mt-2"><strong>Area:</strong> {featuredField.area} ha</p>
+                  <p className="mt-2"><strong>Planting date:</strong> {featuredField.planting_date || "Not recorded"}</p>
+                  <p className="mt-2"><strong>Soil pH:</strong> {Number.isFinite(featuredField.soil_ph) ? featuredField.soil_ph : "Not recorded"}</p>
                 </div>
-                <div className="flex justify-between">
-                  <span className="font-bold text-slate-700">Health Status:</span>
-                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 font-bold text-emerald-800">Healthy</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="font-bold text-slate-700">Season Progress:</span>
-                  <span className="font-bold text-slate-800">78% Complete</span>
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-[#d6e5d3] bg-[#f2f7f0] p-4 text-[#2d4d2b] leading-relaxed">
-                <strong>🌾 Agronomic Fit:</strong> Bush green beans fix atmospheric nitrogen in soil root nodules, reducing synthetic fertilizer requirements for subsequent crop seasons.
-              </div>
+              ) : (
+                <p className="rounded-xl bg-slate-50 p-4 text-slate-500">No active crop field is recorded.</p>
+              )}
             </div>
 
             <div className="flex justify-end border-t border-slate-100 pt-4">
@@ -922,7 +829,7 @@ export default function DashboardHome() {
           >
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h2 className="text-xl font-bold text-[#123d35] flex items-center gap-2">
-                <Plus className="text-[#16875f]" size={22} /> Add New Crop to Farm
+                <Plus className="text-[#16875f]" size={22} /> Add Crop to Library
               </h2>
               <button
                 type="button"
@@ -938,6 +845,7 @@ export default function DashboardHome() {
                 <Check size={16} /> {formSuccess}
               </div>
             )}
+            {formError && <p role="alert" className="rounded-xl bg-red-50 p-3 text-xs text-red-700">{formError}</p>}
 
             <form onSubmit={handleAddCropSubmit} className="space-y-4 text-xs">
               <div>
@@ -946,23 +854,31 @@ export default function DashboardHome() {
                   required
                   value={newCropForm.name}
                   onChange={(e) => setNewCropForm({ ...newCropForm, name: e.target.value })}
-                  placeholder="e.g. Bush Green Beans (Provider cultivar)"
+                  placeholder="Crop name"
+                  className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-xs outline-none focus:border-[#16875f]"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700">Crop Type *</label>
+                <input
+                  required
+                  value={newCropForm.type}
+                  onChange={(e) => setNewCropForm({ ...newCropForm, type: e.target.value })}
+                  placeholder="Enter the crop type"
                   className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-xs outline-none focus:border-[#16875f]"
                 />
               </div>
 
               <div>
                 <label className="block font-bold text-slate-700">Category</label>
-                <select
+                <input
+                  required
                   value={newCropForm.category}
                   onChange={(e) => setNewCropForm({ ...newCropForm, category: e.target.value })}
+                  placeholder="Enter the crop category"
                   className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-xs outline-none focus:border-[#16875f]"
-                >
-                  <option value="Legumes">Legumes</option>
-                  <option value="Solanaceous">Solanaceous</option>
-                  <option value="Cereals">Cereals</option>
-                  <option value="Cover Crops">Cover Crops</option>
-                </select>
+                />
               </div>
 
               <div>
@@ -971,7 +887,7 @@ export default function DashboardHome() {
                   rows={2}
                   value={newCropForm.notes}
                   onChange={(e) => setNewCropForm({ ...newCropForm, notes: e.target.value })}
-                  placeholder="Soil requirements or planting notes..."
+                  placeholder="Optional notes"
                   className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-xs outline-none focus:border-[#16875f]"
                 />
               </div>
@@ -986,9 +902,10 @@ export default function DashboardHome() {
                 </button>
                 <button
                   type="submit"
+                  disabled={isSaving}
                   className="rounded-xl bg-[#16875f] px-5 py-2.5 text-xs font-bold text-white hover:bg-[#0c704d]"
                 >
-                  Save Active Crop
+                  {isSaving ? "Saving..." : "Save Crop"}
                 </button>
               </div>
             </form>
@@ -1001,7 +918,7 @@ export default function DashboardHome() {
         <div
           role="dialog"
           aria-modal="true"
-          aria-label="Live Weather Modal"
+          aria-label="Stored Weather Modal"
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4"
           onClick={() => setActiveModal(null)}
         >
@@ -1011,7 +928,7 @@ export default function DashboardHome() {
           >
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h2 className="text-xl font-bold text-[#123d35] flex items-center gap-2">
-                <Cloud className="text-[#277e96]" size={22} /> Live Weather Details
+                <Cloud className="text-[#277e96]" size={22} /> Stored Weather Details
               </h2>
               <button
                 type="button"
@@ -1024,29 +941,29 @@ export default function DashboardHome() {
 
             <div className="space-y-3 text-xs">
               <div className="rounded-xl bg-[#277e96] p-5 text-white">
-                <p className="text-xs text-white/80">⌖ {weather.location}</p>
+                <p className="text-xs text-white/80">{weather.location || "No location recorded"}</p>
                 <div className="mt-2 flex items-center gap-3">
-                  <strong className="text-4xl font-bold">{weather.temp}°C</strong>
-                  <span className="text-sm">{weather.condition}</span>
+                  <strong className="text-4xl font-bold">{weather.temp === null ? "--" : `${weather.temp}°C`}</strong>
+                  <span className="text-sm">{weather.condition || "No stored weather data"}</span>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-4 border border-slate-100">
                 <div>
                   <span className="text-slate-500">Humidity:</span>
-                  <strong className="block text-slate-800 text-sm">{weather.humidity}%</strong>
+                  <strong className="block text-slate-800 text-sm">{weather.humidity === null ? "--" : `${weather.humidity}%`}</strong>
                 </div>
                 <div>
-                  <span className="text-slate-500">Rainfall:</span>
-                  <strong className="block text-slate-800 text-sm">{weather.rainfall} mm</strong>
+                  <span className="text-slate-500">Rain chance:</span>
+                  <strong className="block text-slate-800 text-sm">{weather.rainfall === null ? "--" : `${weather.rainfall}%`}</strong>
                 </div>
                 <div>
                   <span className="text-slate-500">Wind Speed:</span>
-                  <strong className="block text-slate-800 text-sm">{weather.wind} km/h</strong>
+                  <strong className="block text-slate-800 text-sm">{weather.wind === null ? "--" : `${weather.wind} km/h`}</strong>
                 </div>
                 <div>
                   <span className="text-slate-500">Soil Temperature:</span>
-                  <strong className="block text-slate-800 text-sm">{weather.soilTemperature}°C</strong>
+                  <strong className="block text-slate-800 text-sm">{weather.soilTemperature === null ? "--" : `${weather.soilTemperature}°C`}</strong>
                 </div>
               </div>
             </div>
@@ -1060,7 +977,7 @@ export default function DashboardHome() {
                 }}
                 className="rounded-xl bg-[#277e96] px-5 py-2.5 text-xs font-bold text-white hover:bg-[#1f667a]"
               >
-                Open Full Weather Forecast →
+                View Weather Records →
               </button>
             </div>
           </div>
