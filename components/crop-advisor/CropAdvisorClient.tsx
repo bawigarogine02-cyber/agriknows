@@ -12,14 +12,11 @@ import {
   RefreshCw,
   Search,
   MapPin,
-  ChevronDown,
-  ChevronUp,
   History,
   X,
   Sparkles,
   ArrowRight,
   Info,
-  Layers,
   Printer,
   ShieldCheck,
   Trash2,
@@ -31,20 +28,19 @@ interface CropAdvisorClientProps {
   initialAnalyses: CropAdvisorAnalysis[];
 }
 
-const ANALYSIS_STEPS = [
-  { id: 1, label: "Analyzing uploaded land image...", subtext: "Extracting soil color, texture, moisture & terrain features", icon: Sparkles },
-  { id: 2, label: "Searching agricultural research...", subtext: "Querying peer-reviewed publications and expert studies", icon: BookOpen },
-  { id: 3, label: "Gathering agricultural research...", subtext: "Cross-referencing global soil & crop databases (USDA, FAO)", icon: Globe },
-  { id: 4, label: "Comparing plant requirements...", subtext: "Calculating estimated suitability and compatibility scores", icon: Layers },
-  { id: 5, label: "Generating recommendations...", subtext: "Structuring agronomic insights and soil improvement steps", icon: CheckCircle2 },
-];
+function textMentionsCrop(text: string, cropName: string) {
+  const variants = cropName.split(/[()[\],/]/).map((value) => value.trim()).filter((value) => value.length >= 3);
+  return [...new Set([cropName.trim(), ...variants])].some((variant) => {
+    const escaped = variant.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`, "i").test(text.toLowerCase());
+  });
+}
 
 export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClientProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
-  const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [analysesHistory, setAnalysesHistory] = useState<CropAdvisorAnalysis[]>(initialAnalyses);
   const [currentAnalysis, setCurrentAnalysis] = useState<CropAdvisorAnalysis | null>(
     initialAnalyses.length > 0 ? initialAnalyses[0] : null
@@ -53,7 +49,6 @@ export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClient
   const [savedToast, setSavedToast] = useState<string | null>(null);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [historySearchQuery, setHistorySearchQuery] = useState("");
-  const [showLessSuitable, setShowLessSuitable] = useState(false);
   const [activeTab, setActiveTab] = useState<"recommendations" | "evidence" | "missing_info">("recommendations");
 
   const [locationName, setLocationName] = useState<string>("Detecting Location...");
@@ -100,17 +95,6 @@ export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClient
     setAnalyzing(true);
     setErrorMsg(null);
     setSavedToast(null);
-    setCurrentStepIndex(0);
-
-    // Simulate multi-stage progress for high UX feedback
-    const stepTimer = setInterval(() => {
-      setCurrentStepIndex((prev) => {
-        if (prev < ANALYSIS_STEPS.length - 1) {
-          return prev + 1;
-        }
-        return prev;
-      });
-    }, 900);
 
     try {
       const formData = new FormData();
@@ -126,8 +110,6 @@ export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClient
         body: formData,
       });
 
-      clearInterval(stepTimer);
-
       if (!res.ok) {
         const errJson = await res.json();
         throw new Error(errJson.error || "Failed to analyze image.");
@@ -142,7 +124,6 @@ export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClient
       setSavedToast("Analysis automatically saved to history database.");
       setTimeout(() => setSavedToast(null), 5000);
     } catch (err: unknown) {
-      clearInterval(stepTimer);
       setErrorMsg(err instanceof Error ? err.message : "An error occurred during analysis.");
     } finally {
       setAnalyzing(false);
@@ -186,6 +167,26 @@ export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClient
     const crop = (item.recommendations[0]?.plantName || "").toLowerCase();
     return loc.includes(q) || crop.includes(q);
   });
+  const qualifyingRecommendations = currentAnalysis?.recommendations.filter(
+    (crop) => crop.estimatedSuitability >= 50
+  ) ?? [];
+  const candidateCropNames = qualifyingRecommendations.map((crop) => crop.plantName);
+  const relevantInternalResearch = currentAnalysis?.internal_research.filter((source) =>
+    candidateCropNames.some((cropName) =>
+      textMentionsCrop(`${source.title} ${source.categoryOrCrop} ${source.summary}`, cropName)
+    )
+  ) ?? [];
+  const relevantWebResearch = currentAnalysis?.web_research.filter((source) =>
+    candidateCropNames.some((cropName) =>
+      textMentionsCrop(`${source.topic} ${source.title} ${source.keyTakeaway}`, cropName)
+    )
+  ) ?? [];
+  const webResearchStatus = currentAnalysis?.confidence_score.evidenceBreakdown.webResearchSupport;
+  const displayedWebResearchStatus = webResearchStatus === "No external research sources are configured."
+    ? "External literature search was not run for this saved analysis. Run a new analysis to search for relevant citations."
+    : relevantWebResearch.length === 0 && currentAnalysis?.web_research.length
+      ? "Saved citations did not match the crops in this analysis and are not shown."
+      : webResearchStatus;
 
   return (
     <div className="space-y-7 pb-12">
@@ -202,7 +203,8 @@ export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClient
             </span>
           </div>
           <p className="max-w-2xl text-base text-emerald-100/90 leading-relaxed">
-            Upload an image of your land or soil to receive an AI-powered suitability analysis combining Vision AI, agricultural research publications, global agricultural data, and live climate metrics. All recommendations are automatically saved to your history database.
+            Upload a land or soil image for a preliminary crop screening. The analysis combines AI-generated visual notes,
+            your crop catalog, relevant research records, and weather data when available. Results are saved to your history.
           </p>
         </div>
 
@@ -325,8 +327,13 @@ export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClient
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent" />
                     <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between text-white">
-                      <div>
-                        <p className="text-sm font-bold">{selectedFile?.name}</p>
+                      <div className="min-w-0 flex-1">
+                        <p
+                          title={selectedFile?.name}
+                          className="max-w-full truncate text-sm font-bold"
+                        >
+                          {selectedFile?.name}
+                        </p>
                         <p className="text-xs text-slate-300">
                           {(selectedFile?.size ? selectedFile.size / (1024 * 1024) : 0).toFixed(2)} MB • Ready for analysis
                         </p>
@@ -366,61 +373,20 @@ export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClient
             </div>
           </div>
 
-          {/* Stepper View during analysis */}
+          {/* Analysis progress */}
           {analyzing && (
             <div className="lg:col-span-6 space-y-6">
-              <div className="rounded-2xl border border-emerald-100 bg-white p-6 shadow-md sm:p-8 space-y-6">
+              <div className="rounded-2xl border border-emerald-100 bg-white p-6 shadow-md sm:p-8">
                 <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
                   <div className="flex h-10 w-10 animate-spin items-center justify-center rounded-full border-2 border-emerald-600 border-t-transparent text-emerald-600">
                     <RefreshCw size={18} />
                   </div>
                   <div>
                     <h3 className="text-lg font-bold text-slate-900">Analysis In Progress</h3>
-                    <p className="text-xs text-slate-500">Integrating Vision AI, Database Research & Climate Metrics</p>
+                    <p className="text-xs text-slate-500">
+                      Reviewing image estimates, crop catalog data, and relevant study records.
+                    </p>
                   </div>
-                </div>
-
-                <div className="space-y-4">
-                  {ANALYSIS_STEPS.map((step, idx) => {
-                    const StepIcon = step.icon;
-                    const isCompleted = idx < currentStepIndex;
-                    const isCurrent = idx === currentStepIndex;
-                    return (
-                      <div
-                        key={step.id}
-                        className={`flex items-start gap-4 rounded-xl p-3.5 transition-all ${
-                          isCurrent
-                            ? "bg-emerald-50/80 border border-emerald-200/80 shadow-sm"
-                            : isCompleted
-                            ? "bg-slate-50 opacity-90"
-                            : "opacity-40"
-                        }`}
-                      >
-                        <div
-                          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-                            isCompleted
-                              ? "bg-emerald-600 text-white"
-                              : isCurrent
-                              ? "bg-emerald-100 text-emerald-700 animate-pulse border border-emerald-400"
-                              : "bg-slate-200 text-slate-500"
-                          }`}
-                        >
-                          {isCompleted ? <CheckCircle2 size={16} /> : step.id}
-                        </div>
-                        <div className="flex-1">
-                          <p className={`text-sm font-bold ${isCurrent ? "text-emerald-950" : "text-slate-800"}`}>
-                            {step.label}
-                          </p>
-                          <p className="text-xs text-slate-500">{step.subtext}</p>
-                        </div>
-                        {isCurrent && <StepIcon className="h-5 w-5 text-emerald-600 animate-bounce" />}
-                      </div>
-                    );
-                  })}
-                </div>
-
-                <div className="rounded-xl bg-slate-50 p-4 border border-slate-200/70 text-xs text-slate-600 leading-relaxed">
-                  <span className="font-semibold text-slate-800">Note:</span> Our system combines visual topsoil characteristics with peer-reviewed research papers and Open-Meteo climate data to evaluate crop suitability.
                 </div>
               </div>
             </div>
@@ -483,9 +449,9 @@ export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClient
               }`}
             >
               <Sprout size={17} />
-              <span>Crop Suitability Recommendations</span>
+              <span>Crop Candidates</span>
               <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800 font-extrabold">
-                {currentAnalysis.recommendations.length}
+                {qualifyingRecommendations.length}
               </span>
             </button>
 
@@ -512,7 +478,7 @@ export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClient
               }`}
             >
               <FlaskConical size={17} />
-              <span>Confidence & Lab Testing Guide</span>
+              <span>Evidence Limits & Lab Testing</span>
             </button>
           </div>
 
@@ -523,16 +489,24 @@ export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClient
               <div className="flex items-start gap-3.5 rounded-2xl border border-amber-200 bg-amber-50/70 p-4 text-xs text-amber-900">
                 <Info className="h-5 w-5 shrink-0 text-amber-600 mt-0.5" />
                 <div>
-                  <span className="font-bold">Important Notice:</span> Suitability percentages reflect an{" "}
-                  <strong className="underline">&quot;Estimated Suitability&quot;</strong> based on visual topsoil analysis,
-                  peer-reviewed research studies, and climate data. They do not constitute a scientifically guaranteed
-                  probability of success. Laboratory soil testing (pH & N-P-K) is recommended before major planting.
+                  <span className="font-bold">Important Notice:</span>{" "}
+                  <strong className="underline">Preliminary crop screening</strong> compares AI-estimated surface
+                  conditions and available weather with the crop catalog. Only crops with an estimated screening score
+                  of at least 50% are listed. This heuristic score is not a measured suitability or probability of
+                  success. A photo cannot measure soil pH, nutrients, or drainage; verify conditions with local
+                  expertise and laboratory testing before making planting decisions.
                 </div>
               </div>
 
               {/* Recommended Plants Grid */}
               <div className="grid gap-6 md:grid-cols-2">
-                {currentAnalysis.recommendations.map((plant, index) => (
+                {qualifyingRecommendations.length === 0 && (
+                  <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 md:col-span-2">
+                    No crop met the 50% screening threshold for this analysis. This does not mean crops cannot grow
+                    here; confirm conditions with local agricultural advice and soil-test results.
+                  </p>
+                )}
+                {qualifyingRecommendations.map((plant, index) => (
                   <div
                     key={plant.plantName}
                     className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-6 shadow-sm hover:shadow-md transition"
@@ -545,7 +519,7 @@ export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClient
                             <h3 className="text-xl font-extrabold text-slate-900">{plant.plantName}</h3>
                             {index === 0 && (
                               <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-extrabold text-emerald-800">
-                                Top Pick
+                                Highest-ranked candidate
                               </span>
                             )}
                           </div>
@@ -553,50 +527,19 @@ export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClient
                         </div>
 
                         <div className="text-right">
-                          <span className="text-2xl font-black text-emerald-700">
+                          <span className="block text-2xl font-black text-emerald-700">
                             {plant.estimatedSuitability}%
                           </span>
-                          <p className="text-[11px] font-semibold text-slate-400">Estimated Suitability</p>
-                        </div>
-                      </div>
-
-                      {/* Score Progress Bar */}
-                      <div className="space-y-1.5">
-                        <div className="flex justify-between text-xs font-bold text-slate-700">
-                          <span>Overall Compatibility</span>
-                          <span className="text-emerald-700">{plant.suitabilityRating}</span>
-                        </div>
-                        <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
-                          <div
-                            className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-600"
-                            style={{ width: `${plant.estimatedSuitability}%` }}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Sub-score Factors Breakdown */}
-                      <div className="grid grid-cols-2 gap-2 text-xs bg-slate-50 p-3.5 rounded-xl border border-slate-100">
-                        <div>
-                          <span className="text-slate-500">Soil: </span>
-                          <span className="font-bold text-slate-800">{plant.scoreBreakdown.soilCompatibility}%</span>
-                        </div>
-                        <div>
-                          <span className="text-slate-500">Moisture: </span>
-                          <span className="font-bold text-slate-800">{plant.scoreBreakdown.moistureCompatibility}%</span>
-                        </div>
-                        <div>
-                          <span className="text-slate-500">Temperature: </span>
-                          <span className="font-bold text-slate-800">{plant.scoreBreakdown.temperatureCompatibility}%</span>
-                        </div>
-                        <div>
-                          <span className="text-slate-500">Research Evidence: </span>
-                          <span className="font-bold text-slate-800">{plant.scoreBreakdown.researchEvidence}%</span>
+                          <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-800">
+                            {plant.suitabilityRating}
+                          </span>
+                          <p className="mt-1 text-[11px] font-semibold text-slate-400">Estimated land match</p>
                         </div>
                       </div>
 
                       {/* Reasons for Recommendation */}
                       <div className="space-y-2">
-                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Key Recommendation Reasons</h4>
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Why it ranked here</h4>
                         <ul className="space-y-1.5 text-xs text-slate-700">
                           {plant.reasons.map((reason, rIdx) => (
                             <li key={rIdx} className="flex items-start gap-2">
@@ -647,42 +590,6 @@ export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClient
                 ))}
               </div>
 
-              {/* Less Suitable Plants Accordion */}
-              {currentAnalysis.less_suitable.length > 0 && (
-                <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
-                  <button
-                    type="button"
-                    onClick={() => setShowLessSuitable(!showLessSuitable)}
-                    className="flex w-full items-center justify-between text-left"
-                  >
-                    <div>
-                      <h3 className="text-lg font-bold text-slate-900">Less Suitable Crops ({currentAnalysis.less_suitable.length})</h3>
-                      <p className="text-xs text-slate-500">Crops with lower compatibility scores due to specific soil or water bottlenecks</p>
-                    </div>
-                    {showLessSuitable ? <ChevronUp size={20} className="text-slate-400" /> : <ChevronDown size={20} className="text-slate-400" />}
-                  </button>
-
-                  {showLessSuitable && (
-                    <div className="space-y-4 pt-3 border-t border-slate-100">
-                      {currentAnalysis.less_suitable.map((ls) => (
-                        <div key={ls.plantName} className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="font-bold text-slate-800">{ls.plantName}</span>
-                            <span className="rounded-md bg-slate-200 px-2.5 py-0.5 text-xs font-extrabold text-slate-700">
-                              Estimated Suitability: {ls.estimatedSuitability}%
-                            </span>
-                          </div>
-                          <p className="text-xs text-slate-600">{ls.explanation}</p>
-                          <div className="text-xs text-slate-700 font-semibold pt-1">
-                            <span className="text-rose-700 font-bold">Bottlenecks: </span>
-                            {ls.bottleneckFactors.join(", ")}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
           )}
 
@@ -704,7 +611,7 @@ export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClient
 
                   <div className="space-y-3 text-xs">
                     <div>
-                      <span className="font-bold text-slate-800 block mb-1">Visually Observed Traits:</span>
+                      <span className="font-bold text-slate-800 block mb-1">Visible details suggested by AI:</span>
                       <ul className="list-disc list-inside space-y-1 text-slate-600">
                         {currentAnalysis.image_observations.visuallyObserved.map((obs, idx) => (
                           <li key={idx}>{obs}</li>
@@ -713,7 +620,7 @@ export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClient
                     </div>
 
                     <div className="pt-2 border-t border-slate-100">
-                      <span className="font-bold text-slate-800 block mb-1">Estimated Properties:</span>
+                      <span className="font-bold text-slate-800 block mb-1">AI-estimated properties (not measured):</span>
                       <ul className="list-disc list-inside space-y-1 text-slate-600">
                         {currentAnalysis.image_observations.estimatedProperties.map((est, idx) => (
                           <li key={idx}>{est}</li>
@@ -740,18 +647,23 @@ export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClient
                     </div>
                     <div>
                       <h3 className="text-base font-bold text-slate-900">2. Agricultural Research Database</h3>
-                      <p className="text-[11px] text-slate-400">Internal Studies & Publications</p>
+                      <p className="text-[11px] text-slate-400">Crop-matched records from this app</p>
                     </div>
                   </div>
 
                   <div className="space-y-3 text-xs">
-                    {currentAnalysis.internal_research.map((res, idx) => (
+                    {relevantInternalResearch.map((res, idx) => (
                       <div key={idx} className="rounded-xl bg-slate-50 p-3 border border-slate-100 space-y-1">
                         <span className="font-bold text-slate-800 block">{res.title}</span>
                         <p className="text-slate-500 font-medium">By {res.author} • {res.categoryOrCrop}</p>
                         <p className="text-slate-600 text-[11px] leading-relaxed mt-1">{res.summary}</p>
                       </div>
                     ))}
+                    {relevantInternalResearch.length === 0 && (
+                      <p className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-slate-600">
+                        No internal study matched the crop candidates in this analysis.
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -762,13 +674,13 @@ export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClient
                       <Globe size={20} />
                     </div>
                     <div>
-                      <h3 className="text-base font-bold text-slate-900">3. Verified Web Research</h3>
-                      <p className="text-[11px] text-slate-400">Global Agricultural Citations</p>
+                      <h3 className="text-base font-bold text-slate-900">3. External Literature Search</h3>
+                      <p className="text-[11px] text-slate-400">Crossref-indexed citations screened by crop name</p>
                     </div>
                   </div>
 
                   <div className="space-y-3 text-xs">
-                    {currentAnalysis.web_research.map((web, idx) => (
+                    {relevantWebResearch.map((web, idx) => (
                       <div key={idx} className="rounded-xl bg-slate-50 p-3 border border-slate-100 space-y-1">
                         <a
                           href={web.url}
@@ -779,9 +691,17 @@ export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClient
                           {web.title}
                         </a>
                         <p className="text-slate-500 font-medium">{web.sourceName}</p>
-                        <p className="text-slate-600 text-[11px] leading-relaxed mt-1">{web.keyTakeaway}</p>
+                        <p className="text-slate-600 text-[11px] leading-relaxed mt-1">
+                          <span className="font-semibold">Publisher abstract: </span>
+                          {web.keyTakeaway}
+                        </p>
                       </div>
                     ))}
+                    {relevantWebResearch.length === 0 && (
+                      <p className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-slate-600">
+                        {displayedWebResearchStatus || "No relevant external citation was saved for this analysis."}
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -797,34 +717,32 @@ export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClient
                   <div className="flex items-center gap-3">
                     <ShieldCheck className="h-8 w-8 text-emerald-700" />
                     <div>
-                      <h3 className="text-lg font-extrabold text-emerald-950">Confidence & Evidence Assessment</h3>
-                      <p className="text-xs text-emerald-800">Based on combined image metrics, research data quality & weather</p>
+                      <h3 className="text-lg font-extrabold text-emerald-950">Evidence Limits & Testing</h3>
+                      <p className="text-xs text-emerald-800">This screening is not a calibrated confidence or success probability.</p>
                     </div>
                   </div>
 
-                  <div className="text-right">
-                    <span className="text-2xl font-black text-emerald-800">
-                      {currentAnalysis.confidence_score.confidenceScore}%
-                    </span>
-                    <p className="text-xs font-bold text-emerald-700">{currentAnalysis.confidence_score.overallLevel} Confidence</p>
+                  <div className="max-w-sm rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">
+                    Image estimates cannot replace field measurements. Confirm soil texture, drainage, pH, nutrients,
+                    and local growing conditions before acting on a crop suggestion.
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-emerald-900">
                   <div className="rounded-xl bg-white/70 p-3 border border-emerald-200/50">
-                    <span className="font-bold block">Image Quality:</span>
+                    <span className="font-bold block">Image-based observations:</span>
                     {currentAnalysis.confidence_score.evidenceBreakdown.imageObservationQuality}
                   </div>
                   <div className="rounded-xl bg-white/70 p-3 border border-emerald-200/50">
-                    <span className="font-bold block">Agricultural Research Match:</span>
-                    {currentAnalysis.confidence_score.evidenceBreakdown.internalResearcherDataMatch}
+                    <span className="font-bold block">Relevant internal records:</span>
+                    {relevantInternalResearch.length} saved record(s) mention the candidate crops.
                   </div>
                   <div className="rounded-xl bg-white/70 p-3 border border-emerald-200/50">
-                    <span className="font-bold block">Web Research Citations:</span>
-                    {currentAnalysis.confidence_score.evidenceBreakdown.webResearchSupport}
+                    <span className="font-bold block">External literature lookup:</span>
+                    {displayedWebResearchStatus}
                   </div>
                   <div className="rounded-xl bg-white/70 p-3 border border-emerald-200/50">
-                    <span className="font-bold block">AI Vision Inference:</span>
+                    <span className="font-bold block">Interpretation limits:</span>
                     {currentAnalysis.confidence_score.evidenceBreakdown.aiInferenceCertainty}
                   </div>
                 </div>
@@ -919,13 +837,13 @@ export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClient
                         <span className="text-[10px] font-semibold text-slate-400">ID: {item.id.slice(0, 8)}</span>
                       </div>
                       <p className="text-xs text-slate-500 mt-0.5">
-                        {new Date(item.created_at).toLocaleString()} • {item.recommendations.length} Recommended Crops
+                        {new Date(item.created_at).toLocaleString()} • {item.recommendations.length} Candidate Crops
                       </p>
                     </div>
 
                     <div className="flex items-center gap-3">
                       <span className="rounded-md bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-800">
-                        Top: {item.recommendations[0]?.plantName} ({item.recommendations[0]?.estimatedSuitability}%)
+                        Highest-ranked: {item.recommendations.find((crop) => crop.estimatedSuitability >= 50)?.plantName || "No candidate"}
                       </span>
                       <button
                         type="button"

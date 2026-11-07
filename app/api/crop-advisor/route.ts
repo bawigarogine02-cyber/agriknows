@@ -21,6 +21,16 @@ import {
 import { reverseGeocodeToLocationName } from "@/lib/utils/geolocation";
 import { NextResponse } from "next/server";
 
+class CropAdvisorError extends Error {
+  constructor(
+    message: string,
+    readonly status: number
+  ) {
+    super(message);
+    this.name = "CropAdvisorError";
+  }
+}
+
 export async function GET() {
   const session = await getSession();
   if (!session) {
@@ -140,15 +150,27 @@ export async function POST(request: Request) {
     // 2. Perform AI Vision Model Image Analysis
     const imageObservations: ImageObservations = await analyzeLandImageWithAI(base64Image, mimeType);
 
-    // 3. Query Researchers' Database
-    const internalResearch = await queryResearcherDatabase();
-
-    // 4. Perform Web Research
-    const webResearch: ExternalWebSource[] = [];
-
-    // 5. Calculate Comparison & Suitability Scores for Potential Crops
+    // 3. Rank crop candidates without using literature as a suitability signal.
     const cropsDb = await getCrops();
     const pestsDb = await getPestsDiseases();
+    const preliminaryResults = calculatePlantSuitability(
+      imageObservations,
+      [],
+      [],
+      environmentalData,
+      cropsDb,
+      pestsDb
+    );
+    const searchTopics = preliminaryResults.recommendations
+      .slice(0, 3)
+      .map((crop) => crop.plantName);
+
+    // 4. Include only studies that mention one of the candidate crops.
+    const internalResearch = await queryResearcherDatabase(searchTopics);
+    const webResearchResult = await searchAgriculturalStudies(searchTopics);
+    const webResearch = webResearchResult.sources;
+
+    // 5. Rank candidates using catalog fields; literature is supporting context, not a match score.
     const { recommendations, lessSuitable } = calculatePlantSuitability(
       imageObservations,
       internalResearch,
@@ -158,8 +180,8 @@ export async function POST(request: Request) {
       pestsDb
     );
 
-    // 6. Formulate Confidence Rating & Missing Information Guide
-    const confidenceScore = assessConfidenceLevel(imageObservations, internalResearch, webResearch);
+    // 6. Report evidence limitations and missing information.
+    const evidenceAssessment = assessEvidenceLimits(internalResearch, webResearch, webResearchResult.status);
     const missingInformation = generateMissingInformationGuide(imageObservations);
 
     // 7. Save Analysis to Database/Repository
@@ -174,13 +196,16 @@ export async function POST(request: Request) {
       environmental_data: environmentalData,
       recommendations,
       less_suitable: lessSuitable,
-      confidence_score: confidenceScore,
+      confidence_score: evidenceAssessment,
       missing_information: missingInformation,
     });
 
     return NextResponse.json(savedAnalysis);
   } catch (error) {
     console.error("Crop Advisor processing error:", error);
+    if (error instanceof CropAdvisorError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     return NextResponse.json({ error: "Failed to process land/soil analysis." }, { status: 500 });
   }
 }
@@ -193,54 +218,133 @@ async function analyzeLandImageWithAI(
   mimeType: string
 ): Promise<ImageObservations> {
   const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey?.trim()) throw new Error("Image analysis is unavailable because GEMINI_API_KEY is not configured.");
+  if (!apiKey?.trim()) {
+    throw new CropAdvisorError(
+      "Image analysis is not configured. Set GEMINI_API_KEY on the server and restart the app.",
+      503
+    );
+  }
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              {
-                text: `You are an expert agronomic visual analyst. Analyze this uploaded image of land/soil.
+  let response: Response;
+  try {
+    response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  text: `You are an expert agronomic visual analyst. Analyze this uploaded image of land/soil.
 Extract useful visual observations relevant to plant and crop suitability.
-Do NOT claim that an image can determine laboratory-level soil properties (like exact pH or N-P-K) with certainty.
+Describe only features that are directly visible in the image. Do not infer the region, climate, plant species,
+soil fertility, organic matter, drainage, or exact soil texture from vegetation or color alone. If a feature is
+unclear, say so. Do NOT claim that an image can determine laboratory-level soil properties (like exact pH or N-P-K).
 
 Respond ONLY with JSON using this structure:
 {
-  "visuallyObserved": ["array of clearly visible physical characteristics"],
-  "estimatedProperties": ["array of plausible estimated soil/land traits"],
+  "visuallyObserved": ["array of details directly visible in the image"],
+  "estimatedProperties": ["conservative visual hypotheses; do not infer unobservable soil properties"],
   "requiresLabTesting": ["array of exact chemical/biological properties requiring laboratory testing"],
-  "soilColor": "e.g. Dark Brown / Reddish Loam / Light Clay",
-  "soilTexture": "e.g. Friable Loamy Texture with moderate organic aggregates",
-  "moistureLevel": "e.g. Adequate surface moisture / Dry surface topsoil",
-  "terrainType": "e.g. Gently sloping arable land / Flat flood plain",
-  "vegetationNotes": "e.g. Sparse native grass cover, healthy green foliage nearby"
+  "soilColor": "visible color of exposed soil, or null if soil is not clearly visible",
+  "soilTexture": "visible surface particle or aggregate appearance, or null if indeterminable",
+  "moistureLevel": "visible surface wetness only, or null if indeterminable",
+  "terrainType": "visible slope only when clear, or null if indeterminable",
+  "vegetationNotes": "vegetation directly visible in the image"
 }`,
-              },
-              {
-                inline_data: {
-                  mime_type: mimeType,
-                  data: base64Data,
                 },
-              },
-            ],
-          },
-        ],
-      }),
-      signal: AbortSignal.timeout(12000),
+                {
+                  inline_data: {
+                    mime_type: mimeType,
+                    data: base64Data,
+                  },
+                },
+              ],
+            },
+          ],
+        }),
+        signal: AbortSignal.timeout(30000),
+      }
+    );
+  } catch (error) {
+    if (error instanceof Error && error.name === "TimeoutError") {
+      throw new CropAdvisorError("Image analysis timed out. Please try again.", 504);
     }
-  );
-  if (!response.ok) throw new Error(`Image analysis service returned HTTP ${response.status}.`);
-  const data = await response.json();
-  const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (typeof textResponse !== "string") throw new Error("Image analysis service returned no analysis.");
+    throw new CropAdvisorError(
+      "Could not connect to the image analysis service. Check the server's network connection and try again.",
+      503
+    );
+  }
+  if (!response.ok) {
+    const errorByStatus: Record<number, { message: string; status: number }> = {
+      400: {
+        message: "The image analysis service rejected the request. Check that GEMINI_API_KEY is a valid Google AI Studio API key.",
+        status: 502,
+      },
+      401: {
+        message: "The image analysis service rejected GEMINI_API_KEY. Check the server configuration.",
+        status: 502,
+      },
+      403: {
+        message: "The image analysis service denied access. Check GEMINI_API_KEY permissions and API availability.",
+        status: 502,
+      },
+      404: {
+        message: "The configured image analysis model is unavailable. Check the Gemini model configuration.",
+        status: 502,
+      },
+      429: {
+        message: "The image analysis service quota has been reached. Check the Gemini project quota or try again later.",
+        status: 503,
+      },
+    };
+    const failure = errorByStatus[response.status] ?? {
+      message: "The image analysis service is temporarily unavailable. Please try again later.",
+      status: 503,
+    };
+    console.error("Gemini image analysis request failed:", response.status);
+    throw new CropAdvisorError(failure.message, failure.status);
+  }
+  let data: unknown;
+  try {
+    data = await response.json();
+  } catch {
+    throw new CropAdvisorError(
+      "The image analysis service returned an unreadable response. Please try again.",
+      502
+    );
+  }
+  const isRecord = (value: unknown): value is Record<string, unknown> =>
+    typeof value === "object" && value !== null;
+  const candidates = isRecord(data) && Array.isArray(data.candidates) ? data.candidates : [];
+  const candidate = candidates[0];
+  const content = isRecord(candidate) ? candidate.content : undefined;
+  const parts = isRecord(content) && Array.isArray(content.parts) ? content.parts : [];
+  const textResponse = isRecord(parts[0]) ? parts[0].text : undefined;
+  if (typeof textResponse !== "string") {
+    throw new CropAdvisorError(
+      "The image analysis service returned no usable analysis. Try another image.",
+      502
+    );
+  }
   const jsonMatch = textResponse.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error("Image analysis service returned an invalid result.");
-  const parsed = JSON.parse(jsonMatch[0]) as Record<string, unknown>;
+  if (!jsonMatch) {
+    throw new CropAdvisorError(
+      "The image analysis service returned an invalid result. Please try again.",
+      502
+    );
+  }
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(jsonMatch[0]) as Record<string, unknown>;
+  } catch {
+    throw new CropAdvisorError(
+      "The image analysis service returned an invalid result. Please try again.",
+      502
+    );
+  }
   const stringArray = (value: unknown) =>
     Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
   const optionalString = (value: unknown) => typeof value === "string" && value.trim() ? value : undefined;
@@ -260,37 +364,163 @@ Respond ONLY with JSON using this structure:
 /**
  * Queries internal researcher database publications, articles, and crop studies.
  */
-async function queryResearcherDatabase(): Promise<InternalResearchRef[]> {
+async function queryResearcherDatabase(cropNames: string[]): Promise<InternalResearchRef[]> {
   const publications = await getPublications();
   const articles = await getArticles();
 
   const internalRefs: InternalResearchRef[] = [];
+  const isRelevant = (text: string) => cropNames.some((cropName) => textMentionsCrop(text, cropName));
 
-  // Match research publications
   for (const pub of publications) {
+    const searchableText = `${pub.title} ${pub.crop_type} ${pub.soil_type} ${pub.abstract}`;
+    if (!isRelevant(searchableText)) continue;
     internalRefs.push({
       title: pub.title,
       author: pub.researcher_name,
       categoryOrCrop: pub.crop_type,
       summary: pub.abstract,
-      relevanceReason: `Research publication stored in the database; crop: ${pub.crop_type}, soil: ${pub.soil_type}.`,
+      relevanceReason: `Stored research publication that mentions ${pub.crop_type}.`,
       url: `/knowledge-base`,
     });
   }
 
-  // Match knowledge articles
   for (const art of articles) {
+    if (!isRelevant(`${art.title} ${art.category} ${art.summary}`)) continue;
     internalRefs.push({
       title: art.title,
       author: art.author_name || "Author not recorded",
       categoryOrCrop: art.category,
       summary: art.summary,
-      relevanceReason: `Knowledge-base article stored in the ${art.category} category.`,
+      relevanceReason: `Stored knowledge-base article that mentions ${art.category}.`,
       url: `/knowledge-base`,
     });
   }
 
   return internalRefs;
+}
+
+function cropNameVariants(cropName: string): string[] {
+  const variants = cropName
+    .split(/[()[\],/]/)
+    .map((variant) => variant.trim())
+    .filter((variant) => variant.length >= 3);
+  return [...new Set([cropName.trim(), ...variants])];
+}
+
+function textMentionsCrop(text: string, cropName: string): boolean {
+  const normalizedText = text.toLowerCase();
+  return cropNameVariants(cropName).some((variant) => {
+    const escaped = variant.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`, "i").test(normalizedText);
+  });
+}
+
+async function searchAgriculturalStudies(
+  cropNames: string[]
+): Promise<{ sources: ExternalWebSource[]; status: string }> {
+  const distinctCropNames = [...new Set(cropNames.map((name) => name.trim()).filter(Boolean))].slice(0, 3);
+  if (!distinctCropNames.length) {
+    return { sources: [], status: "No crop candidates were available to search for." };
+  }
+
+  const isRecord = (value: unknown): value is Record<string, unknown> =>
+    typeof value === "object" && value !== null;
+  const results = await Promise.all(distinctCropNames.map(async (cropName) => {
+    const url = new URL("https://api.crossref.org/works");
+    url.search = new URLSearchParams({
+      query: `${cropName} agriculture soil yield`,
+      filter: "type:journal-article",
+      rows: "10",
+      select: "DOI,title,publisher,URL,published,abstract,container-title",
+    }).toString();
+
+    try {
+      const response = await fetch(url, {
+        headers: {
+          Accept: "application/json",
+          "User-Agent": "AgriKMS/1.0 (agricultural study citation lookup)",
+        },
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!response.ok) {
+        console.warn("Crossref study search failed:", response.status);
+        return { sources: [] as ExternalWebSource[], failed: true };
+      }
+
+      const result: unknown = await response.json();
+      const message = isRecord(result) ? result.message : undefined;
+      const items = isRecord(message) && Array.isArray(message.items) ? message.items : [];
+      const sources = items.flatMap((item): ExternalWebSource[] => {
+        if (!isRecord(item) || typeof item.DOI !== "string" || !Array.isArray(item.title)) return [];
+        const title = item.title.find((value): value is string => typeof value === "string")?.trim();
+        if (!title) return [];
+
+        const abstract = typeof item.abstract === "string"
+          ? item.abstract
+            .replace(/<[^>]*>/g, " ")
+            .replace(/&amp;/g, "&")
+            .replace(/&lt;/g, "<")
+            .replace(/&gt;/g, ">")
+            .replace(/&quot;/g, "\"")
+            .replace(/&#39;|&apos;/g, "'")
+            .replace(/\s+/g, " ")
+            .trim()
+          : "";
+        const searchableText = `${title} ${abstract}`;
+        const hasAgriculturalContext =
+          /\b(agricultur\w*|agronom\w*|cultivat\w*|crop\w*|farm\w*|fertili[sz]\w*|harvest\w*|irrigat\w*|nutrient\w*|plant\w*|soil\w*|yield\w*)\b/i.test(searchableText);
+        if (!textMentionsCrop(searchableText, cropName) || !hasAgriculturalContext) return [];
+
+        const doi = item.DOI.trim();
+        if (!/^10\.\d{4,9}\/\S+$/i.test(doi)) return [];
+        const sourceUrl = `https://doi.org/${doi}`;
+        const journal = Array.isArray(item["container-title"])
+          ? item["container-title"].find((value): value is string => typeof value === "string")
+          : undefined;
+        const publisher = typeof item.publisher === "string" ? item.publisher : undefined;
+        const dateParts = isRecord(item.published) && Array.isArray(item.published["date-parts"])
+          ? item.published["date-parts"][0]
+          : undefined;
+        const year = Array.isArray(dateParts) && typeof dateParts[0] === "number"
+          ? dateParts[0]
+          : undefined;
+
+        return [{
+          title,
+          sourceName: [journal || publisher || "Crossref-indexed article", year].filter(Boolean).join(" · "),
+          url: sourceUrl,
+          keyTakeaway: abstract
+            ? abstract.slice(0, 600)
+            : `Abstract not supplied by the publisher. DOI: ${doi}`,
+          topic: cropName,
+        }];
+      });
+      return { sources, failed: false };
+    } catch (error) {
+      console.warn(`Crossref study search failed for ${cropName}:`, error);
+      return { sources: [] as ExternalWebSource[], failed: true };
+    }
+  }));
+
+  const seenDois = new Set<string>();
+  const sources = results.flatMap((result) => result.sources)
+    .filter((source) => {
+      const doi = source.url.replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, "").toLowerCase();
+      if (seenDois.has(doi)) return false;
+      seenDois.add(doi);
+      return true;
+    })
+    .slice(0, 5);
+  const searchesFailed = results.every((result) => result.failed);
+
+  return {
+    sources,
+    status: sources.length
+      ? `Found ${sources.length} Crossref-indexed article${sources.length === 1 ? "" : "s"} whose title or abstract mentions a candidate crop.`
+      : searchesFailed
+        ? "The external literature service could not be reached. Please try again later."
+        : "No Crossref-indexed articles passed the crop-relevance check.",
+  };
 }
 
 /**
@@ -339,97 +569,92 @@ function calculatePlantSuitability(
       ? (crop.terrain.toLowerCase().includes(observedTerrain) || observedTerrain.includes(crop.terrain.toLowerCase()) ? 85 : 50)
       : 50;
     const matchingResearch = internalResearch.filter((reference) =>
-      `${reference.title} ${reference.categoryOrCrop}`.toLowerCase().includes(crop.name.toLowerCase())
+      textMentionsCrop(`${reference.title} ${reference.categoryOrCrop}`, crop.name)
     );
+    const matchingWebResearch = webResearch.filter((reference) => textMentionsCrop(reference.topic, crop.name));
     const matchingPests = pestsDb.filter((pest) => pest.crop_id === crop.cropId);
-    const researchScore = matchingResearch.length ? 80 : 30;
     const moistureScore = observations.moistureLevel ? 65 : 50;
 
     const totalEstimated = Math.round(
-      soilScore * 0.3 + moistureScore * 0.2 + tempScore * 0.2 + terrainScore * 0.15 + researchScore * 0.15
+      (soilScore * 0.3 + moistureScore * 0.2 + tempScore * 0.2 + terrainScore * 0.15) / 0.85
     );
 
-    if (totalEstimated >= 78) {
-      recommendations.push({
-        plantName: crop.name,
-        cropCategory: crop.category,
-        estimatedSuitability: totalEstimated,
-        suitabilityRating: totalEstimated >= 88 ? "Highly Suitable" : "Moderately Suitable",
-        reasons: [
-          `Database soil requirement match: ${soilScore}%.`,
-          `Temperature requirement match using available measurements: ${tempScore}%.`,
-          `Matching database research records: ${matchingResearch.length}.`,
-        ],
-        supportingObservations: [
-          ...[observations.soilTexture, observations.terrainType, observations.moistureLevel].filter(
-            (value): value is string => Boolean(value)
-          ),
-        ],
-        matchingFactors: [
-          `Soil Texture Compatibility: ${soilScore}%`,
-          `Moisture Index Match: ${moistureScore}%`,
-          `Temperature Range Alignment: ${tempScore}%`,
-        ],
-        potentialProblems: matchingPests.map((pest) => `${pest.name}: ${pest.symptoms}`),
-        requiredImprovements: matchingPests.map((pest) => pest.prevention),
-        waterRequirement: crop.waterReq,
-        temperatureRequirement: crop.minTemperature !== null && crop.minTemperature !== undefined
-          && crop.maxTemperature !== null && crop.maxTemperature !== undefined
-          ? `${crop.minTemperature}°C - ${crop.maxTemperature}°C`
-          : crop.climate,
-        soilRequirement: crop.soilReq,
-        idealPhRange: `${crop.idealPhMin} - ${crop.idealPhMax}`,
-        growthDays: crop.growthDays,
-        companionCrops: crop.companionCrops,
-        researcherNotes: matchingResearch.map((reference) => `${reference.title} — ${reference.author}: ${reference.summary}`),
-        scoreBreakdown: {
-          soilCompatibility: soilScore,
-          moistureCompatibility: moistureScore,
-          temperatureCompatibility: tempScore,
-          terrainCompatibility: terrainScore,
-          researchEvidence: researchScore,
-        },
-      });
-    } else {
-      lessSuitable.push({
-        plantName: crop.name,
-        estimatedSuitability: totalEstimated,
-        suitabilityRating: "Marginally Suitable",
-        bottleneckFactors: [
-          `Available soil observations: ${soilScore}% match`,
-          `Available temperature observations: ${tempScore}% match`,
-        ],
-        explanation: `The available observations produced a database-requirement match of ${totalEstimated}%.`,
-        requiredRemediation: [],
-      });
-    }
+    recommendations.push({
+      plantName: crop.name,
+      cropCategory: crop.category,
+      estimatedSuitability: totalEstimated,
+      suitabilityRating: "Potential match",
+      reasons: [
+        "AI-estimated surface details were compared with the crop catalog; they are not measured soil properties.",
+        env.currentTempC !== undefined
+          ? "Current air temperature, not a seasonal climate average, was compared with the crop catalog range."
+          : "No live temperature data was available for comparison.",
+        `Supporting literature: ${matchingResearch.length} relevant internal and ${matchingWebResearch.length} external source(s).`,
+      ],
+      supportingObservations: [
+        ...[observations.soilTexture, observations.terrainType, observations.moistureLevel].filter(
+          (value): value is string => Boolean(value)
+        ),
+      ],
+      matchingFactors: [
+        "Image-estimated soil characteristics",
+        ...(env.currentTempC !== undefined ? ["Current weather temperature"] : []),
+        ...(observations.terrainType ? ["Image-estimated terrain"] : []),
+      ],
+      potentialProblems: matchingPests.map((pest) => `${pest.name}: ${pest.symptoms}`),
+      requiredImprovements: matchingPests.map((pest) => pest.prevention),
+      waterRequirement: crop.waterReq,
+      temperatureRequirement: crop.minTemperature !== null && crop.minTemperature !== undefined
+        && crop.maxTemperature !== null && crop.maxTemperature !== undefined
+        ? `${crop.minTemperature}°C - ${crop.maxTemperature}°C`
+        : crop.climate,
+      soilRequirement: crop.soilReq,
+      idealPhRange: `${crop.idealPhMin} - ${crop.idealPhMax}`,
+      growthDays: crop.growthDays,
+      companionCrops: crop.companionCrops,
+      researcherNotes: [
+        ...matchingResearch.map((reference) => `${reference.title} — ${reference.author}: ${reference.summary}`),
+        ...matchingWebResearch.map((reference) => `${reference.title} — ${reference.sourceName}: ${reference.keyTakeaway}`),
+      ],
+      scoreBreakdown: {
+        soilCompatibility: soilScore,
+        moistureCompatibility: moistureScore,
+        temperatureCompatibility: tempScore,
+        terrainCompatibility: terrainScore,
+        researchEvidence: matchingResearch.length || matchingWebResearch.length ? 80 : 0,
+      },
+    });
   }
 
-  // Sort recommendations descending by score
   recommendations.sort((a, b) => b.estimatedSuitability - a.estimatedSuitability);
+  const qualifyingCandidates = recommendations
+    .filter((recommendation) => recommendation.estimatedSuitability >= 50)
+    .map((recommendation, index) => ({
+      ...recommendation,
+      suitabilityRating: index === 0 ? "Higher relative match" as const : "Potential match" as const,
+    }));
 
-  return { recommendations, lessSuitable };
+  return { recommendations: qualifyingCandidates, lessSuitable };
 }
 
 /**
  * Assesses evidence confidence level.
  */
-function assessConfidenceLevel(
-  obs: ImageObservations,
+function assessEvidenceLimits(
   internalRes: InternalResearchRef[],
-  webRes: ExternalWebSource[]
+  webRes: ExternalWebSource[],
+  webResearchStatus: string
 ): ConfidenceAssessment {
-  const confidenceScore = Math.min(95, 35 + obs.visuallyObserved.length * 5 + internalRes.length * 5 + webRes.length * 10);
   return {
-    overallLevel: confidenceScore >= 75 ? "High" : confidenceScore >= 50 ? "Medium" : "Limited",
-    confidenceScore,
+    overallLevel: "Limited",
+    confidenceScore: 0,
     evidenceBreakdown: {
-      imageObservationQuality: `${obs.visuallyObserved.length} image observations were recorded.`,
-      internalResearcherDataMatch: `${internalRes.length} matching database research records were considered.`,
-      webResearchSupport: webRes.length
-        ? `${webRes.length} external research sources were considered.`
-        : "No external research sources are configured.",
-      aiInferenceCertainty: "Scores use saved crop requirements and the available analysis observations.",
+      imageObservationQuality: "Image interpretation is not a soil measurement.",
+      internalResearcherDataMatch: `${internalRes.length} internal research record(s) mention the candidate crop(s).`,
+      webResearchSupport: webResearchStatus,
+      aiInferenceCertainty: webRes.length
+        ? `${webRes.length} Crossref-indexed citation(s) passed a crop-name relevance check; this does not verify study quality or results.`
+        : "No relevant external citation was included; recommendations remain preliminary.",
     },
   };
 }

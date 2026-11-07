@@ -73,7 +73,7 @@ Then open http://localhost:3000
 1. Create a MySQL database with the base `users`, `locations`, and `crops` tables, then apply the available schema migrations in order through `database/migrations/012_user_approval.sql`. Migration 001 is not included in this checkout, so verify the base tables exist before applying migration 002. Migrations 009–011 add profile/catalog/preferences fields; migration 012 adds pending and rejected user-account approval states.
 2. Copy `.env.example` to `.env.local` and set `DATABASE_URL` and a long random `SESSION_SECRET`.
 3. Register or log in through `/register` or `/login`. Authentication uses the `users` table, hashed passwords, and an HTTP-only session cookie.
-4. Add `GEMINI_API_KEY` to enable the constrained Gemini 3 Flash image observation step. Crop scoring remains deterministic and uses the structured requirements in the database.
+4. Add `GEMINI_API_KEY` to enable the constrained Gemini image observation step. Crop Advisor ranks candidates by comparing image estimates and available weather with the crop catalog, and lists only candidates scoring at least 50%. This heuristic score is not a measured suitability or probability. Relevant research is supporting context and does not change the ranking. The app searches Crossref's public API for crop-related article citations; no additional API key is required.
 
 The dashboard migration keeps the data relational: users own farms, farms contain fields, fields contain crop plantings, crops connect to knowledge articles and recommendations, and locations connect to weather snapshots. Reports and notifications are also scoped to users through foreign keys.
 

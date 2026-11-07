@@ -230,7 +230,14 @@ export interface PlantRecommendation {
   plantName: string;
   cropCategory: string;
   estimatedSuitability: number;
-  suitabilityRating: "Highly Suitable" | "Moderately Suitable" | "Marginally Suitable" | "Unsuitable";
+  suitabilityRating:
+    | "Higher relative match"
+    | "Potential match"
+    | "Lower relative match"
+    | "Highly Suitable"
+    | "Moderately Suitable"
+    | "Marginally Suitable"
+    | "Unsuitable";
   reasons: string[];
   supportingObservations: string[];
   matchingFactors: string[];

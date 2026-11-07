@@ -46,7 +46,7 @@ const farmerNavItems: NavigationItem[] = [
 
 const researcherNavItems: NavigationItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: House },
-  { label: "My Research & Studies", href: "/agricultural-knowledge", icon: FileText },
+  { label: "My Research & Studies", href: "/research-studies", icon: FileText },
   { label: "Knowledge Base", href: "/knowledge-base", icon: BookOpen },
   { label: "Farmer Consultations", href: "/consultations", icon: MessageSquare },
   { label: "Reports & Analytics", href: "/reports", icon: BarChart3 },
