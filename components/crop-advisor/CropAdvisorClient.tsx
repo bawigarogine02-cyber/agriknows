@@ -28,6 +28,16 @@ interface CropAdvisorClientProps {
   initialAnalyses: CropAdvisorAnalysis[];
 }
 
+const analysisDateFormat = new Intl.DateTimeFormat("en-US", {
+  dateStyle: "medium",
+  timeZone: "UTC",
+});
+const analysisDateTimeFormat = new Intl.DateTimeFormat("en-US", {
+  dateStyle: "medium",
+  timeStyle: "short",
+  timeZone: "UTC",
+});
+
 function textMentionsCrop(text: string, cropName: string) {
   const variants = cropName.split(/[()[\],/]/).map((value) => value.trim()).filter((value) => value.length >= 3);
   return [...new Set([cropName.trim(), ...variants])].some((variant) => {
@@ -411,7 +421,7 @@ export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClient
                   </span>
                 </div>
                 <p className="mt-0.5 text-xs text-slate-500">
-                  Analyzed on {new Date(currentAnalysis.created_at).toLocaleDateString()} • Location:{" "}
+                  Analyzed on {analysisDateFormat.format(new Date(currentAnalysis.created_at))} • Location:{" "}
                   {currentAnalysis.environmental_data.locationName}
                 </p>
               </div>
@@ -837,7 +847,7 @@ export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClient
                         <span className="text-[10px] font-semibold text-slate-400">ID: {item.id.slice(0, 8)}</span>
                       </div>
                       <p className="text-xs text-slate-500 mt-0.5">
-                        {new Date(item.created_at).toLocaleString()} • {item.recommendations.length} Candidate Crops
+                        {analysisDateTimeFormat.format(new Date(item.created_at))} • {item.recommendations.length} Candidate Crops
                       </p>
                     </div>
 
