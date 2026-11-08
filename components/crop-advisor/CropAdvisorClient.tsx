@@ -66,6 +66,13 @@ export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClient
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    if (initialAnalyses.length > 0) {
+      setCurrentAnalysis(initialAnalyses[0]);
+      setShowHistoryModal(true);
+    }
+  }, [initialAnalyses]);
+
+  useEffect(() => {
     getAccurateUserLocation().then((res) => {
       setLocationName(res.locationName);
       setCoords({ lat: res.latitude, lng: res.longitude });

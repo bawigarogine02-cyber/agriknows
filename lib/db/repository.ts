@@ -1542,9 +1542,63 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function parseSavedJson(value: unknown): unknown {
   let parsed = Buffer.isBuffer(value) ? value.toString("utf8") : value;
   for (let attempt = 0; attempt < 2 && typeof parsed === "string"; attempt += 1) {
-    parsed = JSON.parse(parsed);
+    const trimmed = parsed.trim();
+    if (!trimmed) return parsed;
+    parsed = JSON.parse(trimmed);
   }
   return parsed;
+}
+
+async function getCropAdvisorTableNames(db: ReturnType<typeof getDb>): Promise<string[]> {
+  const tableNames = ["crop_advisor_analyses", "analyses"];
+  const available: string[] = [];
+
+  for (const tableName of tableNames) {
+    try {
+      await db.query(`SELECT 1 FROM ${tableName} LIMIT 1`);
+      available.push(tableName);
+    } catch (error) {
+      const code = typeof error === "object" && error !== null && "code" in error ? String((error as { code?: string }).code) : "";
+      if (code !== "ER_NO_SUCH_TABLE" && code !== "ER_BAD_TABLE_ERROR") {
+        throw error;
+      }
+    }
+  }
+
+  return available;
+}
+
+function normalizeAnalysisRecord(value: unknown): Partial<CropAdvisorAnalysis> {
+  const record = isRecord(value) ? value : {};
+  const fallbackConfidence: ConfidenceAssessment = {
+    overallLevel: "Medium",
+    confidenceScore: 50,
+    evidenceBreakdown: {
+      imageObservationQuality: "No saved image observations available.",
+      internalResearcherDataMatch: "No saved evidence available.",
+      webResearchSupport: "No external research sources are configured.",
+      aiInferenceCertainty: "No saved inference certainty available.",
+    },
+  };
+
+  return {
+    image_name: typeof record.image_name === "string" ? record.image_name : undefined,
+    location_name: typeof record.location_name === "string" ? record.location_name : undefined,
+    latitude: typeof record.latitude === "number" ? record.latitude : undefined,
+    longitude: typeof record.longitude === "number" ? record.longitude : undefined,
+    image_observations: isRecord(record.image_observations)
+      ? (record.image_observations as unknown as ImageObservations)
+      : { visuallyObserved: [], estimatedProperties: [], requiresLabTesting: [] },
+    internal_research: Array.isArray(record.internal_research) ? (record.internal_research as unknown as InternalResearchRef[]) : [],
+    web_research: Array.isArray(record.web_research) ? (record.web_research as unknown as ExternalWebSource[]) : [],
+    environmental_data: isRecord(record.environmental_data)
+      ? (record.environmental_data as unknown as EnvironmentalSnapshot)
+      : { locationName: record.location_name ? String(record.location_name) : "Unknown Location" },
+    recommendations: Array.isArray(record.recommendations) ? (record.recommendations as unknown as PlantRecommendation[]) : [],
+    less_suitable: Array.isArray(record.less_suitable) ? (record.less_suitable as unknown as LessSuitablePlant[]) : [],
+    confidence_score: isRecord(record.confidence_score) ? (record.confidence_score as unknown as ConfidenceAssessment) : fallbackConfidence,
+    missing_information: normalizeMissingInformationGuide(record.missing_information),
+  };
 }
 
 function normalizeMissingInformationGuide(value: unknown): MissingInformationGuide {
@@ -1576,62 +1630,128 @@ function normalizeMissingInformationGuide(value: unknown): MissingInformationGui
 
 export async function getCropAdvisorAnalyses(userId: string): Promise<CropAdvisorAnalysis[]> {
   const db = getDb();
-  const [rows] = await db.query(
-    `SELECT id, user_id, ai_analysis, missing_information, created_at
-     FROM analyses
-     WHERE user_id = ? AND ai_analysis IS NOT NULL AND TRIM(ai_analysis) <> ''
-     ORDER BY created_at DESC`,
-    [userId]
-  );
-
+  const tableNames = await getCropAdvisorTableNames(db);
   const analyses: CropAdvisorAnalysis[] = [];
+  const seen = new Set<string>();
 
-  for (const row of rows as Array<Record<string, unknown>>) {
-    if (
-      (typeof row.ai_analysis !== "string" && !Buffer.isBuffer(row.ai_analysis)) ||
-      !String(row.ai_analysis).trim()
-    ) {
-      console.warn(`Skipping analysis ${String(row.id)} because it has no saved result.`);
-      continue;
-    }
-
+  for (const tableName of tableNames) {
     try {
-      const savedValue = parseSavedJson(row.ai_analysis) as Omit<
-        CropAdvisorAnalysis,
-        "id" | "user_id" | "created_at"
-      >;
-      if (!isRecord(savedValue)) {
-        console.warn(`Skipping analysis ${String(row.id)} because its saved result is incomplete.`);
-        continue;
-      }
+      const isModernTable = tableName === "crop_advisor_analyses";
+      const [rows] = isModernTable
+        ? await db.query(
+            `SELECT id, user_id, image_name, location_name, latitude, longitude, image_observations,
+                    internal_research, web_research, environmental_data, recommendations,
+                    less_suitable, confidence_score, missing_information, created_at
+             FROM crop_advisor_analyses
+             WHERE user_id = ?
+             ORDER BY created_at DESC`,
+            [userId]
+          )
+        : await db.query(
+            `SELECT id, user_id, ai_analysis, missing_information, created_at
+             FROM analyses
+             WHERE user_id = ?
+             ORDER BY created_at DESC`,
+            [userId]
+          );
 
-      let missingInformation = savedValue.missing_information;
-      if (row.missing_information) {
+      for (const row of rows as Array<Record<string, unknown>>) {
         try {
-          missingInformation = parseSavedJson(row.missing_information) as MissingInformationGuide;
+          if (!row || typeof row.id === "undefined") continue;
+          const analysisId = String(row.id);
+          if (seen.has(analysisId)) continue;
+
+          let savedValue: unknown;
+          if (isModernTable) {
+            savedValue = {
+              image_name: row.image_name ?? undefined,
+              location_name: row.location_name ?? undefined,
+              latitude: typeof row.latitude === "number" ? row.latitude : Number(row.latitude ?? NaN),
+              longitude: typeof row.longitude === "number" ? row.longitude : Number(row.longitude ?? NaN),
+              image_observations: row.image_observations,
+              internal_research: row.internal_research,
+              web_research: row.web_research,
+              environmental_data: row.environmental_data,
+              recommendations: row.recommendations,
+              less_suitable: row.less_suitable,
+              confidence_score: row.confidence_score,
+              missing_information: row.missing_information,
+            };
+          } else if (
+            typeof row.ai_analysis !== "string" && !Buffer.isBuffer(row.ai_analysis) ||
+            !String(row.ai_analysis).trim()
+          ) {
+            console.warn(`Skipping analysis ${analysisId} because it has no saved result.`);
+            continue;
+          } else {
+            savedValue = parseSavedJson(row.ai_analysis);
+          }
+
+          const normalized = isModernTable
+            ? normalizeAnalysisRecord(savedValue)
+            : (() => {
+                const parsedValue = isRecord(savedValue) ? savedValue : {};
+                return normalizeAnalysisRecord(parsedValue);
+              })();
+
+          const missingInfo = row.missing_information
+            ? parseSavedJson(row.missing_information)
+            : normalized.missing_information;
+
+          if (!normalized.recommendations || !Array.isArray(normalized.recommendations)) {
+            continue;
+          }
+
+          const analysis: CropAdvisorAnalysis = {
+            id: analysisId,
+            user_id: String(row.user_id ?? userId),
+            image_name: normalized.image_name,
+            location_name: normalized.location_name,
+            latitude: normalized.latitude,
+            longitude: normalized.longitude,
+            image_observations: normalized.image_observations ?? { visuallyObserved: [], estimatedProperties: [], requiresLabTesting: [] },
+            internal_research: normalized.internal_research ?? [],
+            web_research: normalized.web_research ?? [],
+            environmental_data: normalized.environmental_data ?? { locationName: normalized.location_name || "Unknown Location" },
+            recommendations: normalized.recommendations,
+            less_suitable: normalized.less_suitable ?? [],
+            confidence_score: normalized.confidence_score ?? {
+              overallLevel: "Medium",
+              confidenceScore: 50,
+              evidenceBreakdown: {
+                imageObservationQuality: "No saved image observations available.",
+                internalResearcherDataMatch: "No saved evidence available.",
+                webResearchSupport: "No external research sources are configured.",
+                aiInferenceCertainty: "No saved inference certainty available.",
+              },
+            },
+            missing_information: normalizeMissingInformationGuide(missingInfo),
+            created_at: String(row.created_at ?? new Date().toISOString()),
+          };
+
+          seen.add(analysisId);
+          analyses.push(analysis);
         } catch (error) {
-          if (!(error instanceof SyntaxError)) throw error;
-          console.warn(`Analysis ${String(row.id)} has invalid saved missing-information data.`);
+          if (error instanceof SyntaxError) {
+            console.warn(`Skipping analysis ${String(row.id ?? "unknown")} because its saved result is invalid JSON.`);
+            continue;
+          }
+          console.warn(`Skipping analysis ${String(row.id ?? "unknown")} because it could not be normalized.`, error);
         }
       }
-
-      analyses.push({
-        ...savedValue,
-        id: String(row.id),
-        user_id: String(row.user_id),
-        missing_information: normalizeMissingInformationGuide(missingInformation),
-        created_at: String(row.created_at),
-      });
     } catch (error) {
-      if (error instanceof SyntaxError) {
-        console.warn(`Skipping analysis ${String(row.id)} because its saved result is invalid JSON.`);
+      if (
+        typeof error === "object" && error !== null && "code" in error &&
+        (String((error as { code?: string }).code) === "ER_NO_SUCH_TABLE" ||
+         String((error as { code?: string }).code) === "ER_BAD_TABLE_ERROR")
+      ) {
         continue;
       }
       throw error;
     }
   }
 
-  return analyses;
+  return analyses.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 }
 
 export async function saveCropAdvisorAnalysis(
@@ -1661,18 +1781,47 @@ export async function saveCropAdvisorAnalysis(
       ]
     );
     const locationId = (locationResult as { insertId: number }).insertId;
-    await connection.execute(
-      `INSERT INTO analyses (id, user_id, location_id, image_reference, ai_analysis, missing_information)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [
-        id,
-        userId,
-        locationId,
-        analysisData.image_name || null,
-        JSON.stringify(analysisData),
-        JSON.stringify(analysisData.missing_information),
-      ]
-    );
+
+    const hasModernTable = (await getCropAdvisorTableNames(db)).includes("crop_advisor_analyses");
+    if (hasModernTable) {
+      await connection.execute(
+        `INSERT INTO crop_advisor_analyses (
+          id, user_id, image_name, location_name, latitude, longitude,
+          image_observations, internal_research, web_research, environmental_data,
+          recommendations, less_suitable, confidence_score, missing_information, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+        [
+          id,
+          userId,
+          analysisData.image_name || null,
+          analysisData.location_name || analysisData.environmental_data.locationName || null,
+          analysisData.latitude ?? null,
+          analysisData.longitude ?? null,
+          JSON.stringify(analysisData.image_observations),
+          JSON.stringify(analysisData.internal_research),
+          JSON.stringify(analysisData.web_research),
+          JSON.stringify(analysisData.environmental_data),
+          JSON.stringify(analysisData.recommendations),
+          JSON.stringify(analysisData.less_suitable),
+          JSON.stringify(analysisData.confidence_score),
+          JSON.stringify(analysisData.missing_information),
+        ]
+      );
+    } else {
+      await connection.execute(
+        `INSERT INTO analyses (id, user_id, location_id, image_reference, ai_analysis, missing_information)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          id,
+          userId,
+          locationId,
+          analysisData.image_name || null,
+          JSON.stringify(analysisData),
+          JSON.stringify(analysisData.missing_information),
+        ]
+      );
+    }
+
     await connection.execute(
       "INSERT INTO soil_data (analysis_id, payload) VALUES (?, ?)",
       [id, JSON.stringify(analysisData.image_observations)]
@@ -1714,18 +1863,28 @@ export async function deleteCropAdvisorAnalysis(userId: string, analysisId: stri
   const connection = await db.getConnection();
   try {
     await connection.beginTransaction();
-    const [rows] = await connection.query(
-      "SELECT id FROM analyses WHERE id = ? AND user_id = ? FOR UPDATE",
-      [analysisId, userId]
-    );
-    if (!(rows as unknown[]).length) {
+    const tableNames = await getCropAdvisorTableNames(db);
+    let foundRow = false;
+
+    for (const tableName of tableNames) {
+      const [rows] = await connection.query(
+        `SELECT id FROM ${tableName} WHERE id = ? AND user_id = ? FOR UPDATE`,
+        [analysisId, userId]
+      );
+      if ((rows as unknown[]).length) {
+        foundRow = true;
+        await connection.execute(`DELETE FROM ${tableName} WHERE id = ? AND user_id = ?`, [analysisId, userId]);
+      }
+    }
+
+    if (!foundRow) {
       await connection.rollback();
       return false;
     }
+
     await connection.execute("DELETE FROM crop_recommendations WHERE analysis_id = ?", [analysisId]);
     await connection.execute("DELETE FROM soil_data WHERE analysis_id = ?", [analysisId]);
     await connection.execute("DELETE FROM weather_data WHERE analysis_id = ?", [analysisId]);
-    await connection.execute("DELETE FROM analyses WHERE id = ? AND user_id = ?", [analysisId, userId]);
     await connection.commit();
     return true;
   } catch (error) {
