@@ -10,6 +10,9 @@ export default async function ReportsPage() {
   if (!session) {
     redirect("/login?next=/reports");
   }
+  if (session.role !== "farmer") {
+    redirect("/dashboard");
+  }
 
   const [fields, recommendations] = await Promise.all([
     getFields(session.id),

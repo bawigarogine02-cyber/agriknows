@@ -777,6 +777,57 @@ export async function createCrop(crop: Partial<Crop> & { name: string }): Promis
   };
 }
 
+export async function updateCrop(id: string, crop: Partial<Crop> & { name: string }): Promise<Crop | null> {
+  const db = getDb();
+  const [result] = await db.execute(
+    `UPDATE crops
+     SET name = ?, season = ?, ideal_ph_min = ?, ideal_ph_max = ?, water_requirement = ?, growth_days = ?,
+         climate = ?, companion_crops = ?, category = ?, type = ?, stage = ?, detail = ?, soil = ?
+     WHERE id = ?`,
+    [
+      crop.name,
+      crop.season ?? null,
+      crop.ideal_ph_min ?? null,
+      crop.ideal_ph_max ?? null,
+      crop.water_requirement ?? null,
+      crop.growth_days ?? null,
+      crop.climate ?? null,
+      crop.companion_crops ?? null,
+      crop.category ?? null,
+      crop.type ?? null,
+      crop.stage ?? null,
+      crop.detail ?? null,
+      crop.soil ?? null,
+      id,
+    ]
+  );
+
+  if ((result as { affectedRows: number }).affectedRows === 0) {
+    return null;
+  }
+
+  const [rows] = await db.query("SELECT * FROM crops WHERE id = ? LIMIT 1", [id]);
+  const updated = (rows as Array<Record<string, unknown>>)[0];
+  if (!updated) return null;
+
+  return {
+    id: String(updated.id),
+    name: String(updated.name),
+    season: String(updated.season || ""),
+    ideal_ph_min: Number(updated.ideal_ph_min),
+    ideal_ph_max: Number(updated.ideal_ph_max),
+    water_requirement: String(updated.water_requirement || ""),
+    growth_days: Number(updated.growth_days),
+    climate: String(updated.climate || ""),
+    companion_crops: String(updated.companion_crops || ""),
+    category: updated.category ? String(updated.category) : undefined,
+    type: updated.type ? String(updated.type) : undefined,
+    stage: updated.stage ? String(updated.stage) : undefined,
+    detail: updated.detail ? String(updated.detail) : undefined,
+    soil: updated.soil ? String(updated.soil) : undefined,
+  };
+}
+
 export async function deleteCrop(id: string): Promise<boolean> {
   const [result] = await getDb().execute("DELETE FROM crops WHERE id = ?", [id]);
   return (result as { affectedRows: number }).affectedRows > 0;
