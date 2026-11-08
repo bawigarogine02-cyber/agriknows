@@ -1539,20 +1539,39 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function isMissingInformationGuide(value: unknown): value is MissingInformationGuide {
-  return (
-    isRecord(value) &&
-    Array.isArray(value.criticalMissingFields) &&
-    value.criticalMissingFields.every((field) => typeof field === "string") &&
-    Array.isArray(value.recommendedTests) &&
-    value.recommendedTests.every(
-      (test) =>
-        isRecord(test) &&
-        typeof test.testName === "string" &&
-        typeof test.description === "string" &&
-        ["High", "Medium", "Recommended"].includes(String(test.importance))
-    )
-  );
+function parseSavedJson(value: unknown): unknown {
+  let parsed = Buffer.isBuffer(value) ? value.toString("utf8") : value;
+  for (let attempt = 0; attempt < 2 && typeof parsed === "string"; attempt += 1) {
+    parsed = JSON.parse(parsed);
+  }
+  return parsed;
+}
+
+function normalizeMissingInformationGuide(value: unknown): MissingInformationGuide {
+  if (!isRecord(value)) {
+    return { criticalMissingFields: [], recommendedTests: [] };
+  }
+
+  const criticalMissingFields = Array.isArray(value.criticalMissingFields)
+    ? value.criticalMissingFields.filter((field): field is string => typeof field === "string")
+    : [];
+  const recommendedTests = Array.isArray(value.recommendedTests)
+    ? value.recommendedTests.flatMap((test) => {
+        if (
+          !isRecord(test) ||
+          typeof test.testName !== "string" ||
+          typeof test.description !== "string"
+        ) {
+          return [];
+        }
+        const importance = ["High", "Medium", "Recommended"].includes(String(test.importance))
+          ? (test.importance as "High" | "Medium" | "Recommended")
+          : "Recommended";
+        return [{ testName: test.testName, description: test.description, importance }];
+      })
+    : [];
+
+  return { criticalMissingFields, recommendedTests };
 }
 
 export async function getCropAdvisorAnalyses(userId: string): Promise<CropAdvisorAnalysis[]> {
@@ -1568,13 +1587,16 @@ export async function getCropAdvisorAnalyses(userId: string): Promise<CropAdviso
   const analyses: CropAdvisorAnalysis[] = [];
 
   for (const row of rows as Array<Record<string, unknown>>) {
-    if (typeof row.ai_analysis !== "string" || !row.ai_analysis.trim()) {
+    if (
+      (typeof row.ai_analysis !== "string" && !Buffer.isBuffer(row.ai_analysis)) ||
+      !String(row.ai_analysis).trim()
+    ) {
       console.warn(`Skipping analysis ${String(row.id)} because it has no saved result.`);
       continue;
     }
 
     try {
-      const savedValue = JSON.parse(row.ai_analysis) as Omit<
+      const savedValue = parseSavedJson(row.ai_analysis) as Omit<
         CropAdvisorAnalysis,
         "id" | "user_id" | "created_at"
       >;
@@ -1583,20 +1605,21 @@ export async function getCropAdvisorAnalyses(userId: string): Promise<CropAdviso
         continue;
       }
 
-      const missingInformation: unknown =
-        typeof row.missing_information === "string" && row.missing_information
-          ? JSON.parse(row.missing_information)
-          : savedValue.missing_information;
-      if (!isMissingInformationGuide(missingInformation)) {
-        console.warn(`Skipping analysis ${String(row.id)} because its saved result is incomplete.`);
-        continue;
+      let missingInformation = savedValue.missing_information;
+      if (row.missing_information) {
+        try {
+          missingInformation = parseSavedJson(row.missing_information) as MissingInformationGuide;
+        } catch (error) {
+          if (!(error instanceof SyntaxError)) throw error;
+          console.warn(`Analysis ${String(row.id)} has invalid saved missing-information data.`);
+        }
       }
 
       analyses.push({
         ...savedValue,
         id: String(row.id),
         user_id: String(row.user_id),
-        missing_information: missingInformation,
+        missing_information: normalizeMissingInformationGuide(missingInformation),
         created_at: String(row.created_at),
       });
     } catch (error) {
