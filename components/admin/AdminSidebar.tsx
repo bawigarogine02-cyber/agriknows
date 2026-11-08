@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 const sections = [
   { label: "Overview", href: "/admin", icon: BarChart3 },
   { label: "Users", href: "/admin/users", icon: Users },
+  { label: "Research Management", href: "/admin/research", icon: FileText },
   { label: "Crops", href: "/admin/crops", icon: Sprout },
   { label: "Farms & Fields", href: "/admin/farms", icon: Leaf },
   { label: "Knowledge Articles", href: "/admin/knowledge", icon: BookOpen },

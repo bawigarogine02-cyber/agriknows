@@ -8,7 +8,7 @@ export default async function CropsPage() {
 
   return (
     <CropsPageClient
-      canAddCrop={session?.role === "researcher"}
+      canAddCrop={session?.role === "farmer" || session?.role === "researcher"}
       canDeleteCrop={session?.role === "admin"}
     />
   );

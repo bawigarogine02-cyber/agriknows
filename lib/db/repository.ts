@@ -79,6 +79,7 @@ export interface Article {
   body: string;
   evidence_note?: string;
   source_url?: string;
+  published_at: string | null;
   created_at: string;
 }
 
@@ -909,13 +910,15 @@ export async function getPestsDiseases(): Promise<PestDisease[]> {
   }));
 }
 
-export async function getArticles(): Promise<Article[]> {
+export async function getArticles(includeDrafts = false): Promise<Article[]> {
+  const visibilityFilter = includeDrafts ? "" : "WHERE a.published_at IS NOT NULL";
   const [rows] = await getDb().query(
     `SELECT a.id, a.author_id, u.name AS author_name, a.title, a.category, a.summary, a.body,
-            a.evidence_note, a.source_url,
+            a.evidence_note, a.source_url, a.published_at,
             COALESCE(a.published_at, a.created_at) AS created_at
      FROM knowledge_articles a
      LEFT JOIN users u ON u.id = a.author_id
+     ${visibilityFilter}
      ORDER BY COALESCE(a.published_at, a.created_at) DESC`
   );
   return (rows as Array<Record<string, unknown>>).map((row) => ({
@@ -928,8 +931,64 @@ export async function getArticles(): Promise<Article[]> {
     body: String(row.body),
     evidence_note: row.evidence_note ? String(row.evidence_note) : undefined,
     source_url: row.source_url ? String(row.source_url) : undefined,
+    published_at: row.published_at ? String(row.published_at) : null,
     created_at: String(row.created_at),
   }));
+}
+
+export interface ArticleInput {
+  title: string;
+  category: string;
+  summary: string;
+  body: string;
+  evidence_note: string;
+  source_url: string;
+  published: boolean;
+}
+
+export async function createArticle(authorId: string, article: ArticleInput): Promise<void> {
+  await getDb().execute(
+    `INSERT INTO knowledge_articles
+      (author_id, title, category, summary, body, evidence_note, source_url, published_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, IF(?, CURRENT_TIMESTAMP, NULL))`,
+    [
+      authorId,
+      article.title,
+      article.category,
+      article.summary,
+      article.body,
+      article.evidence_note || null,
+      article.source_url || null,
+      article.published,
+    ]
+  );
+}
+
+export async function updateArticle(id: string, article: ArticleInput): Promise<boolean> {
+  const [result] = await getDb().execute(
+    `UPDATE knowledge_articles
+     SET title = ?, category = ?, summary = ?, body = ?, evidence_note = ?, source_url = ?,
+         published_at = IF(?, COALESCE(published_at, CURRENT_TIMESTAMP), NULL)
+     WHERE id = ?`,
+    [
+      article.title,
+      article.category,
+      article.summary,
+      article.body,
+      article.evidence_note || null,
+      article.source_url || null,
+      article.published,
+      id,
+    ]
+  );
+  if ((result as { affectedRows: number }).affectedRows > 0) return true;
+  const [rows] = await getDb().query("SELECT id FROM knowledge_articles WHERE id = ? LIMIT 1", [id]);
+  return (rows as Array<{ id: string }>).length > 0;
+}
+
+export async function deleteArticle(id: string): Promise<boolean> {
+  const [result] = await getDb().execute("DELETE FROM knowledge_articles WHERE id = ?", [id]);
+  return (result as { affectedRows: number }).affectedRows > 0;
 }
 
 export async function getRecommendations(userId: string): Promise<Recommendation[]> {

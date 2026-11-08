@@ -56,7 +56,8 @@ const researcherNavItems: NavigationItem[] = [
 const adminNavItems: NavigationItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: House },
   { label: "User Governance", href: "/admin/users", icon: Users },
-  { label: "Research Management", href: "/admin/knowledge", icon: BookOpen },
+  { label: "Research Management", href: "/admin/research", icon: FileText },
+  { label: "Knowledge Articles", href: "/admin/knowledge", icon: BookOpen },
   { label: "Crop Reference Data", href: "/admin/crops", icon: Sprout },
   { label: "Crop Advisor Activity", href: "/admin/recommendations", icon: Compass },
   { label: "Farm Parcels Oversight", href: "/admin/farms", icon: Leaf },

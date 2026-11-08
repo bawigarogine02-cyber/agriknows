@@ -8,7 +8,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const auth = await requireRole(["researcher"]);
+  const auth = await requireRole(["farmer", "researcher"]);
   if (auth.response) return auth.response;
 
   let body: {

@@ -259,14 +259,14 @@ export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClient
           {/* Upload Area */}
           <div className={`${analyzing ? "lg:col-span-6" : "lg:col-span-12"} space-y-6 transition-all`}>
             <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-              <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="mb-6 flex flex-col gap-3">
                 <div>
                   <h2 className="text-xl font-bold text-slate-900">Land & Soil Image Upload</h2>
                   <p className="mt-1 text-sm text-slate-500">
                     Provide a clear photo of the soil surface, field plot, or land area for analysis.
                   </p>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                   {analysesHistory.length > 0 && !currentAnalysis && (
                     <button
                       type="button"
@@ -277,7 +277,9 @@ export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClient
                       <span>View Previous Results</span>
                     </button>
                   )}
-                  <span className="text-xs font-medium text-slate-400 shrink-0">Supported: JPG, PNG, WebP (Max 10MB)</span>
+                  <span className="text-xs font-medium text-slate-400">
+                    Supported: JPG, PNG, WebP (Max 10MB)
+                  </span>
                 </div>
               </div>
 
@@ -336,8 +338,8 @@ export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClient
                       className="max-h-[380px] w-full object-cover"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent" />
-                    <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between text-white">
-                      <div className="min-w-0 flex-1">
+                    <div className="absolute bottom-4 left-4 right-4 text-white">
+                      <div className="w-full min-w-0">
                         <p
                           title={selectedFile?.name}
                           className="max-w-full truncate text-sm font-bold"
@@ -348,14 +350,16 @@ export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClient
                           {(selectedFile?.size ? selectedFile.size / (1024 * 1024) : 0).toFixed(2)} MB • Ready for analysis
                         </p>
                       </div>
-                      <button
-                        type="button"
-                        onClick={resetAnalysis}
-                        disabled={analyzing}
-                        className="rounded-lg bg-white/20 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-md transition hover:bg-white/30 disabled:opacity-50"
-                      >
-                        Change Photo
-                      </button>
+                      <div className="mt-2 flex justify-end">
+                        <button
+                          type="button"
+                          onClick={resetAnalysis}
+                          disabled={analyzing}
+                          className="whitespace-nowrap rounded-lg bg-white/20 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-md transition hover:bg-white/30 disabled:opacity-50"
+                        >
+                          Change Photo
+                        </button>
+                      </div>
                     </div>
                   </div>
 
