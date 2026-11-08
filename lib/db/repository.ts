@@ -1535,29 +1535,80 @@ export async function saveUserPreferences(
   return preferences;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isMissingInformationGuide(value: unknown): value is MissingInformationGuide {
+  return (
+    isRecord(value) &&
+    Array.isArray(value.criticalMissingFields) &&
+    value.criticalMissingFields.every((field) => typeof field === "string") &&
+    Array.isArray(value.recommendedTests) &&
+    value.recommendedTests.every(
+      (test) =>
+        isRecord(test) &&
+        typeof test.testName === "string" &&
+        typeof test.description === "string" &&
+        ["High", "Medium", "Recommended"].includes(String(test.importance))
+    )
+  );
+}
+
 export async function getCropAdvisorAnalyses(userId: string): Promise<CropAdvisorAnalysis[]> {
   const db = getDb();
   const [rows] = await db.query(
     `SELECT id, user_id, ai_analysis, missing_information, created_at
-     FROM analyses WHERE user_id = ? ORDER BY created_at DESC`,
+     FROM analyses
+     WHERE user_id = ? AND ai_analysis IS NOT NULL AND TRIM(ai_analysis) <> ''
+     ORDER BY created_at DESC`,
     [userId]
   );
-  return (rows as Array<Record<string, unknown>>).map((row) => {
-    if (typeof row.ai_analysis !== "string" || !row.ai_analysis) {
-      throw new Error(`Analysis ${String(row.id)} does not contain a saved result.`);
+
+  const analyses: CropAdvisorAnalysis[] = [];
+
+  for (const row of rows as Array<Record<string, unknown>>) {
+    if (typeof row.ai_analysis !== "string" || !row.ai_analysis.trim()) {
+      console.warn(`Skipping analysis ${String(row.id)} because it has no saved result.`);
+      continue;
     }
-    const saved = JSON.parse(row.ai_analysis) as Omit<CropAdvisorAnalysis, "id" | "user_id" | "created_at">;
-    return {
-      ...saved,
-      id: String(row.id),
-      user_id: String(row.user_id),
-      missing_information:
-        typeof row.missing_information === "string"
+
+    try {
+      const savedValue = JSON.parse(row.ai_analysis) as Omit<
+        CropAdvisorAnalysis,
+        "id" | "user_id" | "created_at"
+      >;
+      if (!isRecord(savedValue)) {
+        console.warn(`Skipping analysis ${String(row.id)} because its saved result is incomplete.`);
+        continue;
+      }
+
+      const missingInformation: unknown =
+        typeof row.missing_information === "string" && row.missing_information
           ? JSON.parse(row.missing_information)
-          : saved.missing_information,
-      created_at: String(row.created_at),
-    };
-  });
+          : savedValue.missing_information;
+      if (!isMissingInformationGuide(missingInformation)) {
+        console.warn(`Skipping analysis ${String(row.id)} because its saved result is incomplete.`);
+        continue;
+      }
+
+      analyses.push({
+        ...savedValue,
+        id: String(row.id),
+        user_id: String(row.user_id),
+        missing_information: missingInformation,
+        created_at: String(row.created_at),
+      });
+    } catch (error) {
+      if (error instanceof SyntaxError) {
+        console.warn(`Skipping analysis ${String(row.id)} because its saved result is invalid JSON.`);
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  return analyses;
 }
 
 export async function saveCropAdvisorAnalysis(
