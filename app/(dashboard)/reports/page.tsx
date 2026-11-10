@@ -10,7 +10,7 @@ export default async function ReportsPage() {
   if (!session) {
     redirect("/login?next=/reports");
   }
-  if (session.role !== "farmer") {
+  if (session.role === "farmer") {
     redirect("/dashboard");
   }
 

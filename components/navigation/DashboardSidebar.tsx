@@ -41,7 +41,6 @@ const farmerNavItems: NavigationItem[] = [
   { label: "Decision Support", href: "/decision-support", icon: ShieldCheck },
   { label: "Knowledge Base", href: "/knowledge-base", icon: BookOpen },
   { label: "Consultations", href: "/consultations", icon: MessageSquare },
-  { label: "Reports & Analytics", href: "/reports", icon: BarChart3 },
   { label: "Profile", href: "/profile", icon: FileText },
 ];
 

@@ -503,16 +503,6 @@ export default function DashboardHome({
               <span className="text-[11px] font-bold text-slate-700">Crop library</span>
             </button>
 
-            <button
-              type="button"
-              onClick={() => router.push("/reports")}
-              className="flex min-h-[72px] flex-col items-center justify-center gap-2 rounded-xl border border-slate-200 p-2 text-center transition hover:border-[#9dd9bf] hover:bg-[#f5fbf7]"
-            >
-              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#eaf4fc] text-[#3980ad]">
-                <Activity size={16} />
-              </span>
-              <span className="text-[11px] font-bold text-slate-700">Reports</span>
-            </button>
           </div>
         </article>
       </section>
@@ -745,18 +735,6 @@ export default function DashboardHome({
               )}
             </div>
 
-            <div className="flex justify-end border-t border-slate-100 pt-4">
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveModal(null);
-                  router.push("/reports");
-                }}
-                className="rounded-xl bg-[#16875f] px-5 py-2.5 text-xs font-bold text-white hover:bg-[#0c704d]"
-              >
-                View Full Farm Health Report →
-              </button>
-            </div>
           </div>
         </div>
       )}
