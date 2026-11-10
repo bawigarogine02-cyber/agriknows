@@ -173,6 +173,13 @@ export interface StoredWeatherSnapshot {
   observed_at: string;
 }
 
+export interface FarmWeatherLocation {
+  farm_name: string;
+  location: string;
+  latitude: number | null;
+  longitude: number | null;
+}
+
 export interface UserPreferences {
   default_farm_id: string | null;
   units: "metric" | "imperial";
@@ -230,6 +237,7 @@ export interface SuitabilityFactors {
 export interface PlantRecommendation {
   plantName: string;
   cropCategory: string;
+  candidateSource?: "web-verified catalog" | "web-discovered" | "web-search-suggested" | "catalog-suggested" | "regional-suggestion";
   estimatedSuitability: number;
   suitabilityRating:
     | "Higher relative match"
@@ -1530,6 +1538,27 @@ export async function getLatestWeatherSnapshot(userId: string): Promise<StoredWe
     wind_kph: row.wind_kph === null ? null : Number(row.wind_kph),
     condition_label: String(row.condition_label || ""),
     observed_at: String(row.observed_at),
+  };
+}
+
+export async function getPreferredFarmWeatherLocation(userId: string): Promise<FarmWeatherLocation | null> {
+  const [rows] = await getDb().query(
+    `SELECT f.name AS farm_name, COALESCE(l.name, '') AS location, l.latitude, l.longitude
+     FROM farms f
+     LEFT JOIN locations l ON l.id = f.location_id
+     LEFT JOIN user_preferences p ON p.user_id = f.owner_id
+     WHERE f.owner_id = ?
+     ORDER BY (f.id = p.default_farm_id) DESC, f.created_at DESC
+     LIMIT 1`,
+    [userId]
+  );
+  const row = (rows as Array<Record<string, unknown>>)[0];
+  if (!row) return null;
+  return {
+    farm_name: String(row.farm_name || ""),
+    location: String(row.location || ""),
+    latitude: row.latitude === null ? null : Number(row.latitude),
+    longitude: row.longitude === null ? null : Number(row.longitude),
   };
 }
 

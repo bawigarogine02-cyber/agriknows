@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import AddCropModal from "@/components/crops/AddCropModal";
+import type { CropItem } from "@/components/crops/crop-types";
 import type {
   Article,
   Crop,
@@ -13,7 +15,6 @@ import {
   Activity,
   ArrowRight,
   BookOpen,
-  Check,
   Cloud,
   CloudRain,
   CloudSun,
@@ -22,6 +23,7 @@ import {
   Lightbulb,
   MessageSquare,
   Plus,
+  RefreshCw,
   Sprout,
   Sun,
   Wind,
@@ -38,10 +40,20 @@ type WeatherState = {
   wind: number | null;
   location: string;
   condition: string;
-  solarRadiation: number | null;
   soilTemperature: number | null;
+  observedAt: string;
+  forecast: Array<{
+    date: string;
+    high: number | null;
+    low: number | null;
+    rainfall: number | null;
+    condition: string;
+  }>;
+  error: string;
   loading: boolean;
 };
+
+type WeatherApiResponse = Partial<WeatherState> & { error?: string };
 
 type ActiveModal =
   | null
@@ -88,60 +100,87 @@ export default function DashboardHome({
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
   const displayedArticle = selectedArticle || latestArticle;
   const featuredField = activeFields[0];
-  const weather: WeatherState = {
+  const [weather, setWeather] = useState<WeatherState>({
     temp: weatherSnapshot?.temperature_c ?? null,
     humidity: weatherSnapshot?.humidity_percent ?? null,
     rainfall: weatherSnapshot?.rainfall_probability_percent ?? null,
     wind: weatherSnapshot?.wind_kph ?? null,
     location: weatherSnapshot?.location || "",
     condition: weatherSnapshot?.condition_label || "",
-    solarRadiation: null,
     soilTemperature: null,
+    observedAt: weatherSnapshot?.observed_at || "",
+    forecast: [],
+    error: "",
     loading: false,
-  };
-
-  // New crop form state for Add Crop Quick Action
-  const [newCropForm, setNewCropForm] = useState({
-    name: "",
-    type: "",
-    category: "",
-    notes: "",
   });
-  const [formSuccess, setFormSuccess] = useState("");
-  const [formError, setFormError] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
+  const weatherCondition = weather.condition.toLowerCase();
+  const [isLocating, setIsLocating] = useState(false);
+  const [locationError, setLocationError] = useState("");
 
-  const handleAddCropSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newCropForm.name.trim()) return;
-    setFormError("");
-    setIsSaving(true);
+  const refreshWeather = useCallback(async (coordinates?: { latitude: number; longitude: number }) => {
+    setWeather((current) => ({ ...current, loading: true, error: "" }));
     try {
-      const response = await fetch("/api/crops", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: newCropForm.name.trim(),
-        type: newCropForm.type,
-        category: newCropForm.category,
-        detail: newCropForm.notes.trim(),
-      }),
+      const url = new URL("/api/weather", window.location.origin);
+      if (coordinates) {
+        url.searchParams.set("latitude", String(coordinates.latitude));
+        url.searchParams.set("longitude", String(coordinates.longitude));
+      }
+      const response = await fetch(url, { cache: "no-store" });
+      const result = (await response.json()) as WeatherApiResponse;
+      if (!response.ok) throw new Error(result.error || "Unable to load local weather.");
+      setWeather({
+        temp: typeof result.temp === "number" ? result.temp : null,
+        humidity: typeof result.humidity === "number" ? result.humidity : null,
+        rainfall: typeof result.rainfall === "number" ? result.rainfall : null,
+        wind: typeof result.wind === "number" ? result.wind : null,
+        location: result.location || "",
+        condition: result.condition || "",
+        soilTemperature: typeof result.soilTemperature === "number" ? result.soilTemperature : null,
+        observedAt: result.observedAt || "",
+        forecast: Array.isArray(result.forecast) ? result.forecast : [],
+        error: "",
+        loading: false,
       });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Unable to save the crop.");
-      setCrops((current) => [result.crop as Crop, ...current]);
-      setFormSuccess(`Successfully added ${newCropForm.name} to the crop library.`);
-      window.setTimeout(() => {
-      setFormSuccess("");
-      setNewCropForm({ name: "", type: "", category: "", notes: "" });
-      setActiveModal(null);
-      }, 1500);
-    } catch (error) {
-      setFormError(error instanceof Error ? error.message : "Unable to save the crop.");
-    } finally {
-      setIsSaving(false);
+    } catch (weatherError) {
+      setWeather((current) => ({
+        ...current,
+        loading: false,
+        error: weatherError instanceof Error ? weatherError.message : "Unable to load local weather.",
+      }));
     }
-  };
+  }, []);
+
+  const requestDeviceLocation = useCallback(() => {
+    setLocationError("");
+    if (!navigator.geolocation) {
+      setLocationError("Your browser does not support device location. Update your farm location instead.");
+      return;
+    }
+
+    setIsLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      async ({ coords }) => {
+        try {
+          await refreshWeather({ latitude: coords.latitude, longitude: coords.longitude });
+        } finally {
+          setIsLocating(false);
+        }
+      },
+      (error) => {
+        setIsLocating(false);
+        setLocationError(
+          error.code === error.PERMISSION_DENIED
+            ? "Location permission was denied. Allow location access in your browser or update your farm location."
+            : "Your location could not be determined. Try again or update your farm location."
+        );
+      },
+      { enableHighAccuracy: false, maximumAge: 300000, timeout: 12000 }
+    );
+  }, [refreshWeather]);
+
+  useEffect(() => {
+    void refreshWeather();
+  }, [refreshWeather]);
 
   return (
     <div className="space-y-6">
@@ -186,7 +225,7 @@ export default function DashboardHome({
           </div>
         </div>
 
-        {/* Card 1: Today's Weather Card */}
+        {/* Card 1: Local Weather Forecast */}
         <div
           onClick={() => setActiveModal("weatherDetail")}
           className="group cursor-pointer flex flex-col overflow-hidden rounded-2xl bg-white shadow-sm border border-slate-100 transition hover:shadow-md hover:border-[#277e96]/40"
@@ -195,16 +234,26 @@ export default function DashboardHome({
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_10%,#75c0d2,transparent_38%),linear-gradient(135deg,#267c95,#84bc87)] opacity-90" />
             <div className="relative z-10">
               <div className="flex items-center justify-between">
-                <h2 className="text-base font-bold">Latest Stored Weather</h2>
-                <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-bold text-white backdrop-blur-md">
-                  Click for details
-                </span>
+                <h2 className="text-base font-bold">Local Weather Forecast</h2>
+                <button
+                  type="button"
+                  aria-label="Refresh weather"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void refreshWeather();
+                  }}
+                  disabled={weather.loading}
+                  className="flex items-center gap-1 rounded-full bg-white/20 px-2 py-1 text-[10px] font-bold text-white backdrop-blur-md disabled:opacity-70"
+                >
+                  <RefreshCw size={12} className={weather.loading ? "animate-spin" : ""} />
+                  {weather.loading ? "Updating" : weather.observedAt ? "Live" : "Refresh"}
+                </button>
               </div>
-              <p className="mt-1 text-xs text-white/80">{weather.location || "No location recorded"}</p>
+              <p className="mt-1 text-xs text-white/80">{weather.location || "Add a location to your farm"}</p>
               <div className="mt-4 flex items-center gap-3">
-                {weather.condition.includes("Clear") ? (
+                {weatherCondition.includes("clear") ? (
                   <Sun size={40} className="text-amber-300" strokeWidth={1.5} />
-                ) : weather.condition.includes("Rain") ? (
+                ) : weatherCondition.includes("rain") ? (
                   <CloudRain size={40} strokeWidth={1.5} />
                 ) : (
                   <CloudSun size={40} strokeWidth={1.5} />
@@ -214,10 +263,27 @@ export default function DashboardHome({
                     {weather.temp === null ? "--" : `${weather.temp}°C`}
                   </strong>
                   <p className="mt-1 text-xs text-white/90">
-                    {weather.condition || "No stored weather data"}
+                    {weather.condition || (weather.loading ? "Loading local conditions..." : "No forecast available")}
                   </p>
                 </div>
               </div>
+              {weather.error && (
+                <div className="mt-3 space-y-2" role="status">
+                  <p className="text-[11px] font-medium text-white">{weather.error}</p>
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      requestDeviceLocation();
+                    }}
+                    disabled={weather.loading || isLocating}
+                    className="rounded-lg bg-white/20 px-3 py-1.5 text-[10px] font-bold text-white hover:bg-white/30 disabled:opacity-60"
+                  >
+                    {isLocating ? "Finding your location..." : "Use my current location"}
+                  </button>
+                  {locationError && <p className="text-[10px] text-white">{locationError}</p>}
+                </div>
+              )}
             </div>
           </div>
           <div className="grid grid-cols-3 divide-x border-b border-slate-100 py-3 text-center">
@@ -245,7 +311,7 @@ export default function DashboardHome({
             }}
             className="flex w-full items-center justify-end gap-1 px-5 py-3 text-xs font-bold text-[#18765b] hover:underline"
           >
-            View Forecast <ArrowRight size={14} />
+            Forecast details <ArrowRight size={14} />
           </button>
         </div>
       </section>
@@ -816,123 +882,33 @@ export default function DashboardHome({
 
       {/* 7. Quick Action: Add Crop Modal */}
       {activeModal === "addCrop" && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label="Add Crop Quick Action Modal"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4"
-          onClick={() => setActiveModal(null)}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl space-y-5"
-          >
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h2 className="text-xl font-bold text-[#123d35] flex items-center gap-2">
-                <Plus className="text-[#16875f]" size={22} /> Add Crop to Library
-              </h2>
-              <button
-                type="button"
-                onClick={() => setActiveModal(null)}
-                className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            {formSuccess && (
-              <div role="status" className="rounded-xl bg-emerald-50 p-3 text-xs font-bold text-emerald-800 flex items-center gap-2">
-                <Check size={16} /> {formSuccess}
-              </div>
-            )}
-            {formError && <p role="alert" className="rounded-xl bg-red-50 p-3 text-xs text-red-700">{formError}</p>}
-
-            <form onSubmit={handleAddCropSubmit} className="space-y-4 text-xs">
-              <div>
-                <label className="block font-bold text-slate-700">Crop Variety Name *</label>
-                <input
-                  required
-                  value={newCropForm.name}
-                  onChange={(e) => setNewCropForm({ ...newCropForm, name: e.target.value })}
-                  placeholder="Crop name"
-                  className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-xs outline-none focus:border-[#16875f]"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700">Crop Type *</label>
-                <input
-                  required
-                  value={newCropForm.type}
-                  onChange={(e) => setNewCropForm({ ...newCropForm, type: e.target.value })}
-                  placeholder="Enter the crop type"
-                  className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-xs outline-none focus:border-[#16875f]"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700">Category</label>
-                <input
-                  required
-                  value={newCropForm.category}
-                  onChange={(e) => setNewCropForm({ ...newCropForm, category: e.target.value })}
-                  placeholder="Enter the crop category"
-                  className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-xs outline-none focus:border-[#16875f]"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700">Notes</label>
-                <textarea
-                  rows={2}
-                  value={newCropForm.notes}
-                  onChange={(e) => setNewCropForm({ ...newCropForm, notes: e.target.value })}
-                  placeholder="Optional notes"
-                  className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-xs outline-none focus:border-[#16875f]"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setActiveModal(null)}
-                  className="rounded-xl bg-slate-100 px-5 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-200"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSaving}
-                  className="rounded-xl bg-[#16875f] px-5 py-2.5 text-xs font-bold text-white hover:bg-[#0c704d]"
-                >
-                  {isSaving ? "Saving..." : "Save Crop"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <AddCropModal
+          onClose={() => setActiveModal(null)}
+          onCreated={(crop: CropItem) => setCrops((current) => [crop, ...current])}
+        />
       )}
 
-      {/* 8. Weather Detail Modal */}
+      {/* 8. Weather Forecast Modal */}
       {activeModal === "weatherDetail" && (
         <div
           role="dialog"
           aria-modal="true"
-          aria-label="Stored Weather Modal"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4"
+          aria-label="Local Weather Forecast"
+          className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/75 p-4"
           onClick={() => setActiveModal(null)}
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl space-y-5"
+            className="my-8 w-full max-w-2xl space-y-5 rounded-2xl bg-white p-6 shadow-2xl"
           >
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h2 className="text-xl font-bold text-[#123d35] flex items-center gap-2">
-                <Cloud className="text-[#277e96]" size={22} /> Stored Weather Details
+                <Cloud className="text-[#277e96]" size={22} /> Local Weather Forecast
               </h2>
               <button
                 type="button"
                 onClick={() => setActiveModal(null)}
+                aria-label="Close"
                 className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100"
               >
                 <X size={20} />
@@ -941,11 +917,16 @@ export default function DashboardHome({
 
             <div className="space-y-3 text-xs">
               <div className="rounded-xl bg-[#277e96] p-5 text-white">
-                <p className="text-xs text-white/80">{weather.location || "No location recorded"}</p>
+                <p className="text-xs text-white/80">{weather.location || "Add a location to your farm"}</p>
                 <div className="mt-2 flex items-center gap-3">
                   <strong className="text-4xl font-bold">{weather.temp === null ? "--" : `${weather.temp}°C`}</strong>
-                  <span className="text-sm">{weather.condition || "No stored weather data"}</span>
+                  <span className="text-sm">{weather.condition || (weather.loading ? "Loading local conditions..." : "No forecast available")}</span>
                 </div>
+                {weather.observedAt && (
+                  <p className="mt-2 text-[10px] text-white/80">
+                    Updated {new Date(weather.observedAt).toLocaleString()}
+                  </p>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-4 border border-slate-100">
@@ -966,18 +947,64 @@ export default function DashboardHome({
                   <strong className="block text-slate-800 text-sm">{weather.soilTemperature === null ? "--" : `${weather.soilTemperature}°C`}</strong>
                 </div>
               </div>
+
+              {weather.error && <p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-800">{weather.error}</p>}
+              {locationError && <p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-800">{locationError}</p>}
+
+              {weather.forecast.length > 0 && (
+                <div>
+                  <h3 className="mb-2 font-bold text-slate-800">4-day outlook</h3>
+                  <div className="grid gap-2 sm:grid-cols-4">
+                    {weather.forecast.map((day, index) => (
+                      <article key={day.date} className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                        <p className="font-bold text-slate-700">
+                          {index === 0
+                            ? "Today"
+                            : new Date(`${day.date}T12:00:00`).toLocaleDateString(undefined, {
+                                weekday: "short",
+                                month: "short",
+                                day: "numeric",
+                              })}
+                        </p>
+                        <p className="mt-2 text-slate-600">{day.condition}</p>
+                        <p className="mt-1 text-slate-700">
+                          {day.high === null ? "--" : `${day.high}°`} / {day.low === null ? "--" : `${day.low}°`}
+                        </p>
+                        <p className="mt-1 text-slate-500">Rain {day.rainfall === null ? "--" : `${day.rainfall}%`}</p>
+                      </article>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
-            <div className="flex justify-end border-t border-slate-100 pt-4">
+            <div className="flex flex-wrap justify-between gap-2 border-t border-slate-100 pt-4">
+              <button
+                type="button"
+                onClick={requestDeviceLocation}
+                disabled={isLocating || weather.loading}
+                className="rounded-xl bg-[#e6f3f5] px-5 py-2.5 text-xs font-bold text-[#1f667a] hover:bg-[#d5ebef] disabled:opacity-50"
+              >
+                {isLocating ? "Finding location..." : "Use my current location"}
+              </button>
               <button
                 type="button"
                 onClick={() => {
                   setActiveModal(null);
-                  router.push("/weather");
+                  router.push("/farms");
                 }}
                 className="rounded-xl bg-[#277e96] px-5 py-2.5 text-xs font-bold text-white hover:bg-[#1f667a]"
               >
-                View Weather Records →
+                Manage Farm Locations →
+              </button>
+              <button
+                type="button"
+                onClick={() => void refreshWeather()}
+                disabled={weather.loading || isLocating}
+                className="flex items-center gap-2 rounded-xl bg-slate-100 px-5 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-200 disabled:opacity-50"
+              >
+                <RefreshCw size={14} className={weather.loading ? "animate-spin" : ""} />
+                {weather.loading ? "Refreshing..." : "Refresh Forecast"}
               </button>
             </div>
           </div>

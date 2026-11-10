@@ -17,7 +17,6 @@ import {
   Sparkles,
   ArrowRight,
   Info,
-  Printer,
   ShieldCheck,
   Trash2,
 } from "lucide-react";
@@ -53,7 +52,9 @@ export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClient
   const [analyzing, setAnalyzing] = useState(false);
   const [analysesHistory, setAnalysesHistory] = useState<CropAdvisorAnalysis[]>(initialAnalyses);
   const [currentAnalysis, setCurrentAnalysis] = useState<CropAdvisorAnalysis | null>(
-    initialAnalyses.length > 0 ? initialAnalyses[0] : null
+    initialAnalyses[0]?.recommendations.every((crop) => Boolean(crop.candidateSource))
+      ? initialAnalyses[0]
+      : null
   );
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [savedToast, setSavedToast] = useState<string | null>(null);
@@ -64,13 +65,6 @@ export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClient
   const [locationName, setLocationName] = useState<string>("Detecting Location...");
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (initialAnalyses.length > 0) {
-      setCurrentAnalysis(initialAnalyses[0]);
-      setShowHistoryModal(true);
-    }
-  }, [initialAnalyses]);
 
   useEffect(() => {
     getAccurateUserLocation().then((res) => {
@@ -184,8 +178,11 @@ export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClient
     const crop = (item.recommendations[0]?.plantName || "").toLowerCase();
     return loc.includes(q) || crop.includes(q);
   });
+  const hasUnverifiedLegacyRecommendations = currentAnalysis?.recommendations.some(
+    (crop) => !crop.candidateSource
+  ) ?? false;
   const qualifyingRecommendations = currentAnalysis?.recommendations.filter(
-    (crop) => crop.estimatedSuitability >= 50
+    (crop) => Boolean(crop.candidateSource)
   ) ?? [];
   const candidateCropNames = qualifyingRecommendations.map((crop) => crop.plantName);
   const relevantInternalResearch = currentAnalysis?.internal_research.filter((source) =>
@@ -221,7 +218,7 @@ export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClient
           </div>
           <p className="max-w-2xl text-base text-emerald-100/90 leading-relaxed">
             Upload a land or soil image for a preliminary crop screening. The analysis combines AI-generated visual notes,
-            your crop catalog, relevant research records, and weather data when available. Results are saved to your history.
+            the crop catalog, web-researched crop candidates, relevant research records, and weather data when available. Results are saved to your history.
           </p>
         </div>
 
@@ -405,7 +402,7 @@ export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClient
                   <div>
                     <h3 className="text-lg font-bold text-slate-900">Analysis In Progress</h3>
                     <p className="text-xs text-slate-500">
-                      Reviewing image estimates, crop catalog data, and relevant study records.
+                      Reviewing image estimates, crop catalog data, web-discovered crops, and relevant study records.
                     </p>
                   </div>
                 </div>
@@ -439,14 +436,6 @@ export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClient
             </div>
 
             <div className="flex flex-wrap items-center gap-2.5">
-              <button
-                type="button"
-                onClick={() => window.print()}
-                className="flex items-center gap-1.5 rounded-xl border border-slate-300 px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
-              >
-                <Printer size={15} />
-                <span>Print Report</span>
-              </button>
               <button
                 type="button"
                 onClick={handleAnalyzeAnotherImage}
@@ -506,14 +495,21 @@ export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClient
           {/* TAB 1: RECOMMENDATIONS */}
           {activeTab === "recommendations" && (
             <div className="space-y-8">
+              {hasUnverifiedLegacyRecommendations && (
+                <p role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+                  This saved analysis predates web verification. Its old database-only crop results are hidden; run a new analysis to get candidates checked against current agricultural web sources.
+                </p>
+              )}
               {/* Disclaimer Banner */}
               <div className="flex items-start gap-3.5 rounded-2xl border border-amber-200 bg-amber-50/70 p-4 text-xs text-amber-900">
                 <Info className="h-5 w-5 shrink-0 text-amber-600 mt-0.5" />
                 <div>
                   <span className="font-bold">Important Notice:</span>{" "}
-                  <strong className="underline">Preliminary crop screening</strong> compares AI-estimated surface
-                  conditions and available weather with the crop catalog. Only crops with an estimated screening score
-                  of at least 50% are listed. This heuristic score is not a measured suitability or probability of
+                  <strong className="underline">Preliminary crop screening</strong> searches agricultural web sources and
+                  lists every web-grounded candidate, including low-scoring possibilities. If web search fails, catalog
+                  and regional suggestions are shown separately and marked for local verification. Fetched agricultural sources
+                  are attached when available; candidates without a fetched match are marked for verification. The
+                  land-compatibility percentage is a heuristic estimate, capped below 100%, not a measured suitability or probability of
                   success. A photo cannot measure soil pH, nutrients, or drainage; verify conditions with local
                   expertise and laboratory testing before making planting decisions.
                 </div>
@@ -523,8 +519,10 @@ export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClient
               <div className="grid gap-6 md:grid-cols-2">
                 {qualifyingRecommendations.length === 0 && (
                   <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 md:col-span-2">
-                    No crop met the 50% screening threshold for this analysis. This does not mean crops cannot grow
-                    here; confirm conditions with local agricultural advice and soil-test results.
+                    No crop candidates were available for this analysis. Check the external research tab for search status, or try a new analysis with a location and clearer land image.
+                    {displayedWebResearchStatus && (
+                      <span className="mt-2 block text-xs">{displayedWebResearchStatus}</span>
+                    )}
                   </p>
                 )}
                 {qualifyingRecommendations.map((plant, index) => (
@@ -538,6 +536,19 @@ export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClient
                         <div>
                           <div className="flex items-center gap-2">
                             <h3 className="text-xl font-extrabold text-slate-900">{plant.plantName}</h3>
+                            {plant.candidateSource && (
+                              <span className="rounded-full bg-purple-100 px-2.5 py-0.5 text-xs font-bold text-purple-800">
+                                {plant.candidateSource === "regional-suggestion"
+                                  ? "Regional possibility—verify"
+                                  : plant.candidateSource === "catalog-suggested"
+                                  ? "Catalog suggestion—verify"
+                                  : plant.candidateSource === "web-search-suggested"
+                                  ? "Search suggestion—verify"
+                                  : plant.candidateSource === "web-discovered"
+                                    ? "Web-discovered"
+                                    : "Web-verified"}
+                              </span>
+                            )}
                             {index === 0 && (
                               <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-extrabold text-emerald-800">
                                 Highest-ranked candidate
@@ -549,7 +560,7 @@ export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClient
 
                         <div className="text-right">
                           <span className="block text-2xl font-black text-emerald-700">
-                            {plant.estimatedSuitability}%
+                            {Math.min(95, plant.estimatedSuitability)}%
                           </span>
                           <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-800">
                             {plant.suitabilityRating}
@@ -585,7 +596,9 @@ export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClient
                           </div>
                           <div className="rounded-lg bg-slate-50 p-2.5">
                             <span className="text-slate-400 block font-medium">Growth Window</span>
-                            <span className="font-bold text-slate-800">{plant.growthDays} Days</span>
+                            <span className="font-bold text-slate-800">
+                              {plant.growthDays > 0 ? `${plant.growthDays} Days` : "Check cited source"}
+                            </span>
                           </div>
                           <div className="rounded-lg bg-slate-50 p-2.5">
                             <span className="text-slate-400 block font-medium">Companion Crops</span>
@@ -695,8 +708,8 @@ export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClient
                       <Globe size={20} />
                     </div>
                     <div>
-                      <h3 className="text-base font-bold text-slate-900">3. External Literature Search</h3>
-                      <p className="text-[11px] text-slate-400">Crossref-indexed citations screened by crop name</p>
+                      <h3 className="text-base font-bold text-slate-900">3. External Web Research</h3>
+                      <p className="text-[11px] text-slate-400">Fetched agricultural webpages and Crossref citations screened by crop name</p>
                     </div>
                   </div>
 
@@ -713,7 +726,9 @@ export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClient
                         </a>
                         <p className="text-slate-500 font-medium">{web.sourceName}</p>
                         <p className="text-slate-600 text-[11px] leading-relaxed mt-1">
-                          <span className="font-semibold">Publisher abstract: </span>
+                          <span className="font-semibold">
+                            {web.sourceName.includes("Crossref") ? "Publisher abstract: " : "Search note: "}
+                          </span>
                           {web.keyTakeaway}
                         </p>
                       </div>
@@ -864,7 +879,7 @@ export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClient
 
                     <div className="flex items-center gap-3">
                       <span className="rounded-md bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-800">
-                        Highest-ranked: {item.recommendations.find((crop) => crop.estimatedSuitability >= 50)?.plantName || "No candidate"}
+                        Highest-ranked: {item.recommendations.find((crop) => Boolean(crop.candidateSource))?.plantName || "No candidate"}
                       </span>
                       <button
                         type="button"

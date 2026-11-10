@@ -11,22 +11,10 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import AddCropModal from "./AddCropModal";
+import type { CropItem } from "./crop-types";
 
-export type CropItem = {
-  id: string;
-  name: string;
-  season: string;
-  category: string;
-  type?: string;
-  ideal_ph_min: number;
-  ideal_ph_max: number;
-  water_requirement: string;
-  growth_days: number;
-  climate: string;
-  companion_crops: string;
-  detail?: string;
-  soil?: string;
-};
+export type { CropItem } from "./crop-types";
 
 export default function FarmerCropsPage({
   canAddCrop,
@@ -40,26 +28,8 @@ export default function FarmerCropsPage({
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedCropModal, setSelectedCropModal] = useState<CropItem | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
-  const [successMsg, setSuccessMsg] = useState("");
-
-  // New crop form state
-  const [form, setForm] = useState({
-    name: "",
-    season: "Wet Season",
-    category: "Legumes",
-    type: "Agricultural Variety",
-    growth_days: 90,
-    ideal_ph_min: 6.0,
-    ideal_ph_max: 7.5,
-    water_requirement: "400 - 600 mm",
-    climate: "Warm Subtropical",
-    companion_crops: "Legumes, Basil",
-    detail: "",
-    soil: "Well-drained loamy soil",
-  });
 
   const fetchCrops = useCallback(async () => {
     setIsLoading(true);
@@ -97,78 +67,6 @@ export default function FarmerCropsPage({
     }, 0);
     return () => window.clearTimeout(timer);
   }, [fetchCrops]);
-
-  const handleAddCrop = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.name.trim()) {
-      setError("Please enter a crop name.");
-      return;
-    }
-
-    setIsSubmitting(true);
-    setError("");
-    setSuccessMsg("");
-
-    const payload = {
-      name: form.name.trim(),
-      season: form.season.trim(),
-      category: form.category,
-      type: form.type.trim(),
-      growth_days: Number(form.growth_days) || 90,
-      ideal_ph_min: Number(form.ideal_ph_min) || 6.0,
-      ideal_ph_max: Number(form.ideal_ph_max) || 7.5,
-      water_requirement: form.water_requirement.trim(),
-      climate: form.climate.trim(),
-      companion_crops: form.companion_crops.trim(),
-      detail: form.detail.trim() || `Cultivated ${form.category.toLowerCase()} variety managed in workspace field records.`,
-      soil: form.soil.trim(),
-    };
-
-    try {
-      const response = await fetch("/api/crops", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        setError(data.error || "Failed to add crop.");
-        setIsSubmitting(false);
-        return;
-      }
-
-      const createdCrop = data.crop as CropItem;
-
-      setCrops((prev) => [createdCrop, ...prev]);
-      setSuccessMsg(`Successfully added "${createdCrop.name}" to your crop catalog!`);
-
-      setForm({
-        name: "",
-        season: "Wet Season",
-        category: "Legumes",
-        type: "Agricultural Variety",
-        growth_days: 90,
-        ideal_ph_min: 6.0,
-        ideal_ph_max: 7.5,
-        water_requirement: "400 - 600 mm",
-        climate: "Warm Subtropical",
-        companion_crops: "Legumes, Basil",
-        detail: "",
-        soil: "Well-drained loamy soil",
-      });
-
-      setTimeout(() => {
-        setShowAddModal(false);
-        setSuccessMsg("");
-      }, 1200);
-    } catch {
-      setError("Network error while adding crop.");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
 
   const handleDeleteCrop = async (id: string, name: string) => {
     if (!confirm(`Are you sure you want to remove "${name}" from your catalog?`)) return;
@@ -224,7 +122,6 @@ export default function FarmerCropsPage({
           type="button"
           onClick={() => {
             setError("");
-            setSuccessMsg("");
             setShowAddModal(true);
           }}
           className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#16875f] px-5 py-3 text-sm font-bold text-white shadow-md transition hover:bg-[#0c704d] focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
@@ -402,202 +299,11 @@ export default function FarmerCropsPage({
         </div>
       )}
 
-      {/* Add Crop Modal */}
       {canAddCrop && showAddModal && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label="Add New Crop Modal"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 overflow-y-auto"
-          onClick={() => setShowAddModal(false)}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="my-8 w-full max-w-xl rounded-2xl bg-white p-6 sm:p-7 shadow-2xl space-y-5"
-          >
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h2 className="text-xl font-bold text-[#123d35] flex items-center gap-2">
-                <Sprout className="text-[#16875f]" size={24} /> Add New Crop Entry
-              </h2>
-              <button
-                type="button"
-                onClick={() => setShowAddModal(false)}
-                className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            {error && (
-              <div className="rounded-xl bg-rose-50 p-3 text-xs font-semibold text-rose-700 border border-rose-200">
-                ⚠️ {error}
-              </div>
-            )}
-
-            {successMsg && (
-              <div className="rounded-xl bg-emerald-50 p-3 text-xs font-semibold text-emerald-800 border border-emerald-200">
-                ✅ {successMsg}
-              </div>
-            )}
-
-            <form onSubmit={handleAddCrop} className="space-y-4 text-xs">
-              <div>
-                <label className="block font-bold text-slate-700">Crop Name & Species *</label>
-                <input
-                  required
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  placeholder="e.g. Bush Green Beans (Phaseolus vulgaris)"
-                  className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-xs outline-none focus:border-[#16875f]"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div>
-                  <label className="block font-bold text-slate-700">Category *</label>
-                  <select
-                    value={form.category}
-                    onChange={(e) => setForm({ ...form, category: e.target.value })}
-                    className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-xs outline-none focus:border-[#16875f]"
-                  >
-                    <option value="Legumes">Legumes</option>
-                    <option value="Cereals">Cereals</option>
-                    <option value="Solanaceous">Solanaceous</option>
-                    <option value="Root Crops">Root Crops</option>
-                    <option value="Cover Crops">Cover Crops</option>
-                    <option value="Vegetables">Vegetables</option>
-                    <option value="Fruits">Fruits</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700">Variety / Type</label>
-                  <input
-                    value={form.type}
-                    onChange={(e) => setForm({ ...form, type: e.target.value })}
-                    placeholder="e.g. Compact Bush Legume"
-                    className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-xs outline-none focus:border-[#16875f]"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div>
-                  <label className="block font-bold text-slate-700">Season</label>
-                  <select
-                    value={form.season}
-                    onChange={(e) => setForm({ ...form, season: e.target.value })}
-                    className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-xs outline-none focus:border-[#16875f]"
-                  >
-                    <option value="Wet Season">Wet Season</option>
-                    <option value="Dry Season">Dry Season</option>
-                    <option value="Year-Round">Year-Round</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700">Growth Days</label>
-                  <input
-                    type="number"
-                    min={10}
-                    max={365}
-                    value={form.growth_days}
-                    onChange={(e) => setForm({ ...form, growth_days: Number(e.target.value) || 90 })}
-                    className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-xs outline-none focus:border-[#16875f]"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700">Water Needs</label>
-                  <input
-                    value={form.water_requirement}
-                    onChange={(e) => setForm({ ...form, water_requirement: e.target.value })}
-                    placeholder="e.g. 400 - 600 mm"
-                    className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-xs outline-none focus:border-[#16875f]"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div>
-                  <label className="block font-bold text-slate-700">Ideal pH Min</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    min={4.0}
-                    max={9.0}
-                    value={form.ideal_ph_min}
-                    onChange={(e) => setForm({ ...form, ideal_ph_min: Number(e.target.value) || 6.0 })}
-                    className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-xs outline-none focus:border-[#16875f]"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700">Ideal pH Max</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    min={4.0}
-                    max={9.0}
-                    value={form.ideal_ph_max}
-                    onChange={(e) => setForm({ ...form, ideal_ph_max: Number(e.target.value) || 7.5 })}
-                    className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-xs outline-none focus:border-[#16875f]"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div>
-                  <label className="block font-bold text-slate-700">Climate Zone</label>
-                  <input
-                    value={form.climate}
-                    onChange={(e) => setForm({ ...form, climate: e.target.value })}
-                    placeholder="e.g. Warm Subtropical"
-                    className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-xs outline-none focus:border-[#16875f]"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700">Companion Crops</label>
-                  <input
-                    value={form.companion_crops}
-                    onChange={(e) => setForm({ ...form, companion_crops: e.target.value })}
-                    placeholder="e.g. Legumes, Basil, Squash"
-                    className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-xs outline-none focus:border-[#16875f]"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700">Agronomic Description & Field Notes</label>
-                <textarea
-                  rows={3}
-                  value={form.detail}
-                  onChange={(e) => setForm({ ...form, detail: e.target.value })}
-                  placeholder="Growing characteristics, soil preference, drainage needs, nitrogen fixation notes..."
-                  className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-xs outline-none focus:border-[#16875f]"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setShowAddModal(false)}
-                  className="rounded-xl bg-slate-100 px-5 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-200"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="rounded-xl bg-[#16875f] px-6 py-2.5 text-xs font-bold text-white hover:bg-[#0c704d] disabled:opacity-50"
-                >
-                  {isSubmitting ? "Saving..." : "Save Crop Entry"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <AddCropModal
+          onClose={() => setShowAddModal(false)}
+          onCreated={(crop) => setCrops((current) => [crop, ...current])}
+        />
       )}
 
       {/* Crop Details Modal */}
