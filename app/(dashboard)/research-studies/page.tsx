@@ -1,6 +1,6 @@
 import ResearchStudiesPageClient from "@/components/consultations/ResearchStudiesPageClient";
 import { getSession } from "@/lib/auth/session";
-import { getCrops, getPublications } from "@/lib/db/repository";
+import { getArticles, getCrops, getPublications, getPestsDiseases } from "@/lib/db/repository";
 import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +14,12 @@ export default async function ResearchStudiesPage() {
     redirect("/consultations");
   }
 
-  const [publications, crops] = await Promise.all([getPublications(), getCrops()]);
+  const [publications, crops, pests, articles] = await Promise.all([
+    getPublications({ researcherId: session.id }),
+    getCrops(),
+    getPestsDiseases({ authorId: session.id }),
+    getArticles(false, { authorId: session.id }),
+  ]);
 
   return (
     <section className="space-y-6">
@@ -33,7 +38,10 @@ export default async function ResearchStudiesPage() {
       <ResearchStudiesPageClient
         crops={crops}
         publications={publications}
+        pests={pests}
+        articles={articles}
         userRole={session.role}
+        currentUserId={session.id}
       />
     </section>
   );

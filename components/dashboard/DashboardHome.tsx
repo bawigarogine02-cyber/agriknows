@@ -423,7 +423,7 @@ export default function DashboardHome({
               </div>
             </div>
           ) : (
-            <p className="p-5 text-xs text-slate-500">No knowledge articles are available.</p>
+            <p className="p-5 text-xs text-slate-500">No available data</p>
           )}
         </article>
 
@@ -547,7 +547,7 @@ export default function DashboardHome({
                   </span>
                 </div>
               )) : (
-                <p className="rounded-xl bg-slate-50 p-4 text-xs text-slate-500">No active field records are available.</p>
+                <p className="rounded-xl bg-slate-50 p-4 text-xs text-slate-500">No available data</p>
               )}
             </div>
 
@@ -612,7 +612,7 @@ export default function DashboardHome({
                   {rec.field_name && <p className="text-slate-400">Field: {rec.field_name}</p>}
                 </div>
               )) : (
-                <p className="rounded-xl bg-slate-50 p-4 text-slate-500">No recommendations are saved for your account.</p>
+                <p className="rounded-xl bg-slate-50 p-4 text-slate-500">No available data</p>
               )}
             </div>
 
@@ -674,7 +674,7 @@ export default function DashboardHome({
                   <h3 className="mt-1.5 font-bold text-[#123d35] text-sm">{art.title}</h3>
                   <p className="mt-1 text-slate-500">{art.summary}</p>
                 </div>
-              )) : <p className="rounded-xl bg-slate-50 p-4 text-slate-500">No knowledge articles are available.</p>}
+              )) : <p className="rounded-xl bg-slate-50 p-4 text-slate-500">No available data</p>}
             </div>
 
             <div className="flex justify-end border-t border-slate-100 pt-4">
@@ -731,7 +731,7 @@ export default function DashboardHome({
                   </div>
                 </div>
               )) : (
-                <p className="rounded-xl bg-slate-50 p-4 text-slate-500">No field records are available.</p>
+                <p className="rounded-xl bg-slate-50 p-4 text-slate-500">No available data</p>
               )}
             </div>
 
@@ -785,7 +785,7 @@ export default function DashboardHome({
                   )}
                 </>
               ) : (
-                <p>No knowledge article is available.</p>
+                <p>No available data</p>
               )}
             </div>
 
@@ -838,7 +838,7 @@ export default function DashboardHome({
                   <p className="mt-2"><strong>Soil pH:</strong> {Number.isFinite(featuredField.soil_ph) ? featuredField.soil_ph : "Not recorded"}</p>
                 </div>
               ) : (
-                <p className="rounded-xl bg-slate-50 p-4 text-slate-500">No active crop field is recorded.</p>
+                <p className="rounded-xl bg-slate-50 p-4 text-slate-500">No available data</p>
               )}
             </div>
 
@@ -929,7 +929,7 @@ export default function DashboardHome({
               {weather.error && <p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-800">{weather.error}</p>}
               {locationError && <p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-800">{locationError}</p>}
 
-              {weather.forecast.length > 0 && (
+              {weather.forecast.length > 0 ? (
                 <div>
                   <h3 className="mb-2 font-bold text-slate-800">4-day outlook</h3>
                   <div className="grid gap-2 sm:grid-cols-4">
@@ -953,6 +953,8 @@ export default function DashboardHome({
                     ))}
                   </div>
                 </div>
+              ) : (
+                <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">No available data</p>
               )}
             </div>
 

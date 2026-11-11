@@ -3,22 +3,33 @@
 import { Crop } from "@/lib/db/repository";
 import { BookOpen, Upload, X } from "lucide-react";
 import { useState } from "react";
+import type { ResearchPublication } from "@/lib/db/repository";
 
 interface PublishResearchModalProps {
   isOpen: boolean;
   crops: Crop[];
+  userRole?: string;
+  initialPublication?: ResearchPublication | null;
   onClose: () => void;
   onSuccess: () => void;
 }
 
-export default function PublishResearchModal({ isOpen, crops, onClose, onSuccess }: PublishResearchModalProps) {
-  const [title, setTitle] = useState("");
-  const [abstract, setAbstract] = useState("");
-  const [cropType, setCropType] = useState(crops[0]?.name || "");
-  const [soilType, setSoilType] = useState("");
-  const [pdfUrl, setPdfUrl] = useState("");
+export default function PublishResearchModal({
+  isOpen,
+  crops,
+  userRole,
+  initialPublication = null,
+  onClose,
+  onSuccess,
+}: PublishResearchModalProps) {
+  const [title, setTitle] = useState(() => initialPublication?.title || "");
+  const [abstract, setAbstract] = useState(() => initialPublication?.abstract || "");
+  const [cropType, setCropType] = useState(() => initialPublication?.crop_type || crops[0]?.name || "");
+  const [soilType, setSoilType] = useState(() => initialPublication?.soil_type || "");
+  const [pdfUrl, setPdfUrl] = useState(() => initialPublication?.pdf_url || "");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const isAdmin = userRole === "admin";
 
   if (!isOpen) return null;
 
@@ -32,8 +43,14 @@ export default function PublishResearchModal({ isOpen, crops, onClose, onSuccess
     setIsSubmitting(true);
 
     try {
-      const res = await fetch("/api/publications", {
-        method: "POST",
+      const res = await fetch(
+        initialPublication
+          ? isAdmin
+            ? `/api/admin/research/${initialPublication.id}`
+            : `/api/publications/${initialPublication.id}`
+          : "/api/publications",
+        {
+        method: initialPublication ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: title.trim(),
@@ -45,14 +62,14 @@ export default function PublishResearchModal({ isOpen, crops, onClose, onSuccess
       });
 
       if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Failed to publish research paper.");
+        const data: { error?: string } = await res.json();
+        throw new Error(data.error || `Failed to ${initialPublication ? "update" : "publish"} research paper.`);
       }
 
       onSuccess();
       onClose();
     } catch (err) {
-      setError((err as Error).message);
+      setError(err instanceof Error ? err.message : "Unable to save the research paper.");
     } finally {
       setIsSubmitting(false);
     }
@@ -67,7 +84,9 @@ export default function PublishResearchModal({ isOpen, crops, onClose, onSuccess
               <BookOpen size={22} />
             </div>
             <div>
-              <h2 className="text-xl font-extrabold text-[#123d35]">Publish Agricultural Research Paper</h2>
+              <h2 className="text-xl font-extrabold text-[#123d35]">
+                {initialPublication ? "Update Agricultural Research Paper" : "Publish Agricultural Research Paper"}
+              </h2>
               <p className="text-xs text-slate-500">Contribute peer-reviewed agricultural findings.</p>
             </div>
           </div>
@@ -83,6 +102,7 @@ export default function PublishResearchModal({ isOpen, crops, onClose, onSuccess
             <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">Study Title *</label>
             <input
               type="text"
+              required
               placeholder="e.g. Comparative Analysis of Bio-Fertilization in Tropical Maize Cultivation"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -124,6 +144,7 @@ export default function PublishResearchModal({ isOpen, crops, onClose, onSuccess
             <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">Abstract Summary *</label>
             <textarea
               rows={4}
+              required
               placeholder="Provide a concise summary of your research methodology, field trials, and core findings..."
               value={abstract}
               onChange={(e) => setAbstract(e.target.value)}
@@ -156,7 +177,7 @@ export default function PublishResearchModal({ isOpen, crops, onClose, onSuccess
               className="inline-flex items-center gap-2 rounded-xl bg-[#16875f] px-6 py-2.5 text-xs font-bold text-white shadow-md hover:bg-[#064b3b] disabled:opacity-50"
             >
               <Upload size={16} />
-              {isSubmitting ? "Publishing..." : "Publish Research"}
+              {isSubmitting ? "Saving..." : initialPublication ? "Update Research" : "Publish Research"}
             </button>
           </div>
         </form>

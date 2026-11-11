@@ -1,20 +1,37 @@
 "use client";
 
-import { Article, Crop, PestDisease } from "@/lib/db/repository";
-import { BookOpen, Bug, Calendar, ChevronRight, FileText, Filter, Globe, Info, Layers, Search, ShieldCheck, Sprout, X } from "lucide-react";
+import { Article, Crop, PestDisease, ResearchPublication } from "@/lib/db/repository";
+import { parseGuideSteps } from "@/lib/knowledge/guide-content";
+import { BookOpen, Bug, ChevronRight, FileText, Search, Sprout, X } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
+import PublishResearchModal from "@/components/consultations/PublishResearchModal";
+import ResearchPublicationsFeed from "@/components/consultations/ResearchPublicationsFeed";
 
 interface KnowledgeBaseExplorerProps {
   crops: Crop[];
   pests: PestDisease[];
   articles: Article[];
+  publications: ResearchPublication[];
+  userRole: string;
+  currentUserId: string;
 }
 
-export default function KnowledgeBaseExplorer({ crops, pests, articles }: KnowledgeBaseExplorerProps) {
-  const [activeTab, setActiveTab] = useState<"crops" | "pests" | "guides">("crops");
+export default function KnowledgeBaseExplorer({
+  crops,
+  pests,
+  articles,
+  publications,
+  userRole,
+  currentUserId,
+}: KnowledgeBaseExplorerProps) {
+  const router = useRouter();
+  const [activeTab, setActiveTab] = useState<"crops" | "pests" | "guides" | "research">("crops");
   const [searchQuery, setSearchQuery] = useState("");
   const [pestTypeFilter, setPestTypeFilter] = useState<string>("all");
   const [seasonFilter, setSeasonFilter] = useState<string>("all");
+  const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
+  const [editingPublication, setEditingPublication] = useState<ResearchPublication | null>(null);
 
   // Selection state for Detail Drawer / Modal
   const [selectedCrop, setSelectedCrop] = useState<Crop | null>(null);
@@ -32,17 +49,19 @@ export default function KnowledgeBaseExplorer({ crops, pests, articles }: Knowle
     const matchesType = pestTypeFilter === "all" || p.type === pestTypeFilter;
     return matchesSearch && matchesType;
   });
+  const pestTypes = [...new Set(pests.map((pest) => pest.type))].sort();
 
   const filteredArticles = articles.filter((a) => {
     return a.title.toLowerCase().includes(searchQuery.toLowerCase()) || a.category.toLowerCase().includes(searchQuery.toLowerCase());
   });
+  const selectedArticleSteps = selectedArticle ? parseGuideSteps(selectedArticle.body) : null;
 
   return (
     <div className="space-y-6">
       {/* Tabbed Navigation & Filter Bar */}
       <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-xs sm:flex-row sm:items-center sm:justify-between">
         {/* Tab Buttons */}
-        <div className="flex items-center rounded-xl bg-slate-100 p-1.5 text-xs font-bold">
+        <div className="flex flex-wrap items-center rounded-xl bg-slate-100 p-1.5 text-xs font-bold">
           <button
             type="button"
             onClick={() => setActiveTab("crops")}
@@ -73,10 +92,20 @@ export default function KnowledgeBaseExplorer({ crops, pests, articles }: Knowle
             <BookOpen size={16} />
             Guides & Articles ({articles.length})
           </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("research")}
+            className={`flex items-center gap-2 rounded-lg px-4 py-2 transition ${
+              activeTab === "research" ? "bg-[#16875f] text-white shadow-xs" : "text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            <FileText size={16} />
+            Research Papers ({publications.length})
+          </button>
         </div>
 
         {/* Filter Controls */}
-        <div className="flex flex-wrap items-center gap-3">
+        {activeTab !== "research" && <div className="flex flex-wrap items-center gap-3">
           <div className="flex h-10 w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 text-slate-400 sm:w-64">
             <Search size={17} />
             <input
@@ -108,18 +137,32 @@ export default function KnowledgeBaseExplorer({ crops, pests, articles }: Knowle
               className="h-10 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-700 outline-none"
             >
               <option value="all">All Classifications</option>
-              <option value="insect">Insect Pests</option>
-              <option value="fungus">Fungal Infections</option>
-              <option value="bacterial">Bacterial Pathogens</option>
-              <option value="virus">Viral Diseases</option>
+              {pestTypes.map((type) => (
+                <option key={type} value={type}>
+                  {type === "insect"
+                    ? "Insect Pests"
+                    : type === "fungus"
+                      ? "Fungal Infections"
+                      : type === "bacterial"
+                        ? "Bacterial Pathogens"
+                        : type === "virus"
+                          ? "Viral Diseases"
+                          : type}
+                </option>
+              ))}
             </select>
           )}
-        </div>
+        </div>}
       </div>
 
       {/* Tab 1: Crops View */}
       {activeTab === "crops" && (
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {filteredCrops.length === 0 && (
+            <p className="rounded-xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-600 sm:col-span-2 lg:col-span-3">
+              No available data
+            </p>
+          )}
           {filteredCrops.map((crop) => (
             <article key={crop.id} className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-6 shadow-xs transition hover:shadow-md">
               <div>
@@ -166,6 +209,11 @@ export default function KnowledgeBaseExplorer({ crops, pests, articles }: Knowle
       {/* Tab 2: Pests & Diseases View */}
       {activeTab === "pests" && (
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-2">
+          {filteredPests.length === 0 && (
+            <p className="rounded-xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-600 sm:col-span-2">
+              No available data
+            </p>
+          )}
           {filteredPests.map((pest) => (
             <article key={pest.id} className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
               <div>
@@ -216,6 +264,11 @@ export default function KnowledgeBaseExplorer({ crops, pests, articles }: Knowle
       {/* Tab 3: Guides & Articles View */}
       {activeTab === "guides" && (
         <div className="space-y-4">
+          {filteredArticles.length === 0 && (
+            <p className="rounded-xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-600">
+              No available data
+            </p>
+          )}
           {filteredArticles.map((article) => (
             <article key={article.id} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs transition hover:shadow-md">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -232,7 +285,7 @@ export default function KnowledgeBaseExplorer({ crops, pests, articles }: Knowle
                   onClick={() => setSelectedArticle(article)}
                   className="shrink-0 rounded-xl bg-[#16875f] px-5 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-[#064b3b]"
                 >
-                  Read Full Article
+                  {article.category.startsWith("Guide:") ? "Read Guide" : "Read Full Article"}
                 </button>
               </div>
 
@@ -242,6 +295,31 @@ export default function KnowledgeBaseExplorer({ crops, pests, articles }: Knowle
             </article>
           ))}
         </div>
+      )}
+
+      {activeTab === "research" && (
+        <ResearchPublicationsFeed
+          publications={publications}
+          userRole={userRole}
+          currentUserId={currentUserId}
+          onOpenPublishModal={() => setIsPublishModalOpen(true)}
+          onEditPublication={setEditingPublication}
+          onRefresh={() => router.refresh()}
+        />
+      )}
+
+      {(isPublishModalOpen || editingPublication !== null) && (
+        <PublishResearchModal
+          key={editingPublication?.id || "new-publication"}
+          isOpen
+          crops={crops}
+          initialPublication={editingPublication}
+          onClose={() => {
+            setIsPublishModalOpen(false);
+            setEditingPublication(null);
+          }}
+          onSuccess={() => router.refresh()}
+        />
       )}
 
       {/* Modal / Drawer for Crop Details */}
@@ -372,8 +450,21 @@ export default function KnowledgeBaseExplorer({ crops, pests, articles }: Knowle
               </button>
             </div>
 
-            <div className="mt-6 prose prose-slate max-w-none text-sm leading-relaxed text-slate-800 whitespace-pre-line">
-              {selectedArticle.body}
+            <div className="mt-6 space-y-4 text-sm leading-relaxed text-slate-800">
+              {selectedArticleSteps ? (
+                <ol className="space-y-3">
+                  {selectedArticleSteps.map((step, index) => (
+                    <li key={`${index}-${step}`} className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#e0f5eb] text-xs font-bold text-[#16875f]">
+                        {index + 1}
+                      </span>
+                      <p className="pt-1 whitespace-pre-line">{step}</p>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p className="whitespace-pre-line">{selectedArticle.body}</p>
+              )}
             </div>
 
             <div className="mt-8 flex justify-end pt-4 border-t border-slate-100">
@@ -382,7 +473,7 @@ export default function KnowledgeBaseExplorer({ crops, pests, articles }: Knowle
                 onClick={() => setSelectedArticle(null)}
                 className="rounded-xl bg-[#16875f] px-6 py-2.5 text-xs font-bold text-white shadow-xs"
               >
-                Done Reading
+                {selectedArticle.category.startsWith("Guide:") ? "Close Guide" : "Done Reading"}
               </button>
             </div>
           </div>

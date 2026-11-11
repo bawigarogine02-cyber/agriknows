@@ -1,10 +1,16 @@
 import AdminKnowledgeArticles from "@/components/admin/AdminKnowledgeArticles";
-import { getArticles } from "@/lib/db/repository";
+import { getArticles, getCrops, getPestsDiseases } from "@/lib/db/repository";
+import AdminKnowledgeApprovals from "@/components/admin/AdminKnowledgeApprovals";
+import ResearchPublishingActions from "@/components/consultations/ResearchPublishingActions";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminKnowledgePage() {
-  const articles = await getArticles(true);
+  const [articles, pests, crops] = await Promise.all([
+    getArticles(true, { includePending: true }),
+    getPestsDiseases({ includePending: true }),
+    getCrops(),
+  ]);
 
   return (
     <section className="space-y-6">
@@ -15,7 +21,18 @@ export default async function AdminKnowledgePage() {
           Create, edit, publish, and remove agricultural guidance articles.
         </p>
       </header>
-      <AdminKnowledgeArticles initialArticles={articles} />
+      <ResearchPublishingActions crops={crops} userRole="admin" />
+      <AdminKnowledgeApprovals
+        initialArticles={articles.filter((article) => article.approval_status === "pending" && article.published_at !== null)}
+        initialPests={pests.filter((pest) => pest.approval_status === "pending")}
+      />
+      <AdminKnowledgeArticles
+        key={`${articles.map((article) => article.id).join("-")}-${pests.map((pest) => pest.id).join("-")}`}
+        initialArticles={articles}
+        initialPests={pests}
+        crops={crops}
+        showCreateButton={false}
+      />
     </section>
   );
 }

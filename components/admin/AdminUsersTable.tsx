@@ -352,7 +352,7 @@ export default function AdminUsersTable() {
           </table>
         </div>
 
-        {displayedUsers.length === 0 && <p className="p-8 text-center text-slate-500">No user accounts match your search/filters.</p>}
+        {displayedUsers.length === 0 && <p className="p-8 text-center text-slate-500">No available data</p>}
 
         <div className="flex items-center justify-between border-t border-slate-100 px-6 py-4 text-xs font-semibold text-slate-600">
           <span>

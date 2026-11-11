@@ -5,6 +5,11 @@ import { CheckCircle2, Layers, Leaf, MapPin, Pencil, Plus, RefreshCw, Sprout, Tr
 import { useState } from "react";
 import CropCycleToggle from "./CropCycleToggle";
 import FieldFormModal from "./FieldFormModal";
+import ConfirmActionDialog from "@/components/ui/ConfirmActionDialog";
+
+type FarmDataDeleteTarget =
+  | { kind: "farm"; farm: Farm }
+  | { kind: "field"; field: Field };
 
 interface FarmCardGridProps {
   initialFarms: Farm[];
@@ -20,6 +25,7 @@ export default function FarmCardGrid({ initialFarms, initialFields, crops }: Far
   const [isFarmModalOpen, setIsFarmModalOpen] = useState(false);
   const [editingFarm, setEditingFarm] = useState<Farm | null>(null);
   const [editingField, setEditingField] = useState<Field | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<FarmDataDeleteTarget | null>(null);
   const [fieldEdit, setFieldEdit] = useState({ name: "", area: "", crop_name: "", planting_date: "", soil_ph: "", organic_matter: "", water_source: "" });
   const [fieldError, setFieldError] = useState("");
   const [actionError, setActionError] = useState("");
@@ -108,35 +114,25 @@ export default function FarmCardGrid({ initialFarms, initialFields, crops }: Far
   }
 
   async function handleDeleteFarm(farm: Farm) {
-    if (!window.confirm(`Delete "${farm.name}" and all of its field plots? Related recommendation history will be retained without its field link.`)) return;
-    try {
-      const response = await fetch("/api/farms", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: farm.id }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Unable to delete farm.");
-      await reloadData();
-    } catch (error) {
-      setActionError(error instanceof Error ? error.message : "Unable to delete farm.");
-    }
+    const response = await fetch("/api/farms", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: farm.id }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Unable to delete farm.");
+    await reloadData();
   }
 
   async function handleDeleteField(field: Field) {
-    if (!window.confirm(`Delete field plot "${field.name}"? Related recommendation history will be retained without its field link.`)) return;
-    try {
-      const response = await fetch("/api/fields", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ field_id: field.id }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Unable to delete field plot.");
-      await reloadData();
-    } catch (error) {
-      setActionError(error instanceof Error ? error.message : "Unable to delete field plot.");
-    }
+    const response = await fetch("/api/fields", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ field_id: field.id }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Unable to delete field plot.");
+    await reloadData();
   }
 
   async function handleUpdateField(event: React.FormEvent<HTMLFormElement>) {
@@ -212,6 +208,11 @@ export default function FarmCardGrid({ initialFarms, initialFields, crops }: Far
       <section className="space-y-4">
         <h3 className="text-xl font-bold tracking-tight text-[#123d35]">Registered Farm Parcels</h3>
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {farms.length === 0 && (
+            <p className="rounded-xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-500 sm:col-span-2 lg:col-span-3">
+              No available data
+            </p>
+          )}
           {farms.map((farm) => {
             const farmFields = fields.filter((f) => f.farm_id === farm.id);
             return (
@@ -233,7 +234,7 @@ export default function FarmCardGrid({ initialFarms, initialFields, crops }: Far
                       setFarmError("");
                       setIsFarmModalOpen(true);
                     }} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><Pencil size={15} /></button>
-                    <button type="button" aria-label={`Delete ${farm.name}`} onClick={() => void handleDeleteFarm(farm)} className="rounded-lg p-2 text-rose-600 hover:bg-rose-50"><Trash2 size={15} /></button>
+                    <button type="button" aria-label={`Delete ${farm.name}`} onClick={() => setDeleteTarget({ kind: "farm", farm })} className="rounded-lg p-2 text-rose-600 hover:bg-rose-50"><Trash2 size={15} /></button>
                   </div>
                 </div>
 
@@ -267,6 +268,11 @@ export default function FarmCardGrid({ initialFarms, initialFields, crops }: Far
         </div>
 
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {displayedFields.length === 0 && (
+            <p className="rounded-xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-500 sm:col-span-2 lg:col-span-3">
+              No available data
+            </p>
+          )}
           {displayedFields.map((field) => (
             <article key={field.id} className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
               <div>
@@ -325,7 +331,7 @@ export default function FarmCardGrid({ initialFarms, initialFields, crops }: Far
                     });
                     setFieldError("");
                   }} className="rounded-lg border border-slate-200 p-2 text-slate-600 hover:bg-slate-50"><Pencil size={14} /></button>
-                  <button type="button" aria-label={`Delete ${field.name}`} onClick={() => void handleDeleteField(field)} className="rounded-lg border border-rose-200 p-2 text-rose-700 hover:bg-rose-50"><Trash2 size={14} /></button>
+                  <button type="button" aria-label={`Delete ${field.name}`} onClick={() => setDeleteTarget({ kind: "field", field })} className="rounded-lg border border-rose-200 p-2 text-rose-700 hover:bg-rose-50"><Trash2 size={14} /></button>
                   <button
                     type="button"
                     onClick={() => void handleToggleHarvest(field.id)}
@@ -477,6 +483,22 @@ export default function FarmCardGrid({ initialFarms, initialFields, crops }: Far
           </div>
         </div>
       )}
+      <ConfirmActionDialog
+        isOpen={deleteTarget !== null}
+        title={deleteTarget?.kind === "farm" ? "Delete farm and field plots?" : "Delete field plot?"}
+        description={deleteTarget?.kind === "farm"
+          ? `Delete "${deleteTarget.farm.name}" and all of its field plots? Related recommendation history will be retained without its field link.`
+          : deleteTarget
+            ? `Delete field plot "${deleteTarget.field.name}"? Related recommendation history will be retained without its field link.`
+            : ""}
+        confirmLabel={deleteTarget?.kind === "farm" ? "Delete farm" : "Delete field"}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={async () => {
+          if (deleteTarget?.kind === "farm") await handleDeleteFarm(deleteTarget.farm);
+          if (deleteTarget?.kind === "field") await handleDeleteField(deleteTarget.field);
+          setDeleteTarget(null);
+        }}
+      />
     </div>
   );
 }

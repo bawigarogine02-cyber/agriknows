@@ -49,7 +49,7 @@ export default function InquiryThreadList({ consultations, onReplyAdded }: Inqui
         <div className="space-y-3">
           {consultations.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-center text-xs text-slate-500">
-              No farmer inquiries submitted yet. Click &quot;Ask an Expert&quot; above to create an inquiry.
+              No available data
             </div>
           ) : (
             consultations.map((c) => (
@@ -129,6 +129,11 @@ export default function InquiryThreadList({ consultations, onReplyAdded }: Inqui
 
             {/* Conversation Messages Feed */}
             <div className="mt-6 space-y-4 max-h-[360px] overflow-y-auto pr-1">
+              {(!selectedConsultation.replies || selectedConsultation.replies.length === 0) && (
+                <p className="rounded-xl bg-slate-50 p-4 text-center text-xs text-slate-500">
+                  No available data
+                </p>
+              )}
               {(selectedConsultation.replies || []).map((reply) => {
                 const isResearcher = reply.sender_role === "researcher" || reply.sender_role === "admin";
                 return (

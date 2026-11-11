@@ -4,6 +4,7 @@ import type { FormEvent } from "react";
 import { useMemo, useState } from "react";
 import { LoaderCircle, Pencil, Plus, Trash2, Sprout, X } from "lucide-react";
 import type { Crop } from "@/lib/db/repository";
+import ConfirmActionDialog from "@/components/ui/ConfirmActionDialog";
 
 type CropForm = {
   name: string;
@@ -40,6 +41,7 @@ const emptyForm: CropForm = {
 export default function AdminCropCatalog({ initialCrops }: { initialCrops: Crop[] }) {
   const [crops, setCrops] = useState(initialCrops);
   const [editingCrop, setEditingCrop] = useState<Crop | null>(null);
+  const [cropPendingDelete, setCropPendingDelete] = useState<Crop | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [form, setForm] = useState<CropForm>(emptyForm);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -132,23 +134,14 @@ export default function AdminCropCatalog({ initialCrops }: { initialCrops: Crop[
   }
 
   async function removeCrop(crop: Crop) {
-    const confirmed = window.confirm(`Delete "${crop.name}" from the crop reference library?`);
-    if (!confirmed) return;
-
-    try {
-      const response = await fetch("/api/crops", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: crop.id }),
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error ?? "Unable to delete crop.");
-      }
-      setCrops((current) => current.filter((item) => item.id !== crop.id));
-    } catch (removeError) {
-      setError(removeError instanceof Error ? removeError.message : "Unable to delete crop.");
-    }
+    const response = await fetch("/api/crops", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: crop.id }),
+    });
+    const data: { error?: string } = await response.json();
+    if (!response.ok) throw new Error(data.error ?? "Unable to delete crop.");
+    setCrops((current) => current.filter((item) => item.id !== crop.id));
   }
 
   return (
@@ -169,7 +162,7 @@ export default function AdminCropCatalog({ initialCrops }: { initialCrops: Crop[
           </button>
         </div>
 
-        <div className="grid gap-4 border-b border-slate-100 bg-[#f8faf7] p-5 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-4 border-b border-slate-100 bg-[#f8faf7] p-5 md:grid-cols-2">
           <div className="rounded-xl border border-slate-200 bg-white p-4">
             <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Records</p>
             <p className="mt-2 text-2xl font-extrabold text-[#064b3b]">{summary.total}</p>
@@ -177,10 +170,6 @@ export default function AdminCropCatalog({ initialCrops }: { initialCrops: Crop[
           <div className="rounded-xl border border-slate-200 bg-white p-4">
             <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Longest crop cycle</p>
             <p className="mt-2 text-2xl font-extrabold text-[#064b3b]">{summary.longestGrowth || 0} days</p>
-          </div>
-          <div className="rounded-xl border border-slate-200 bg-white p-4">
-            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Library status</p>
-            <p className="mt-2 text-lg font-bold text-emerald-700">Active</p>
           </div>
         </div>
 
@@ -193,8 +182,7 @@ export default function AdminCropCatalog({ initialCrops }: { initialCrops: Crop[
         {crops.length === 0 ? (
           <div className="px-6 py-14 text-center">
             <Sprout className="mx-auto h-9 w-9 text-slate-300" />
-            <p className="mt-3 text-lg font-semibold text-slate-700">No crop records yet</p>
-            <p className="mt-1 text-sm text-slate-500">Add the first crop to populate the reference library.</p>
+            <p className="mt-3 text-lg font-semibold text-slate-700">No available data</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -236,7 +224,7 @@ export default function AdminCropCatalog({ initialCrops }: { initialCrops: Crop[
                         </button>
                         <button
                           type="button"
-                          onClick={() => removeCrop(crop)}
+                          onClick={() => setCropPendingDelete(crop)}
                           className="inline-flex items-center gap-1.5 rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100"
                         >
                           <Trash2 size={13} />
@@ -418,6 +406,19 @@ export default function AdminCropCatalog({ initialCrops }: { initialCrops: Crop[
           </div>
         </div>
       )}
+      <ConfirmActionDialog
+        isOpen={cropPendingDelete !== null}
+        title="Delete crop?"
+        description={cropPendingDelete
+          ? `Delete "${cropPendingDelete.name}" from the crop reference library? This cannot be undone.`
+          : ""}
+        confirmLabel="Delete crop"
+        onClose={() => setCropPendingDelete(null)}
+        onConfirm={async () => {
+          if (cropPendingDelete) await removeCrop(cropPendingDelete);
+          setCropPendingDelete(null);
+        }}
+      />
     </>
   );
 }

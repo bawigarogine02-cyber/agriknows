@@ -8,6 +8,7 @@ import {
   Search,
   X,
 } from "lucide-react";
+import { parseGuideSteps } from "@/lib/knowledge/guide-content";
 
 type Article = {
   id: string;
@@ -51,6 +52,12 @@ export default function AgriculturalKnowledgePage() {
     const matchesCategory = selectedCategory === "All" || article.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
+  const activeGuideSteps = activeArticleModal ? parseGuideSteps(activeArticleModal.body) : null;
+  const getArticleWordCount = (article: Article) => {
+    const guideSteps = parseGuideSteps(article.body);
+    const content = guideSteps ? guideSteps.join(" ") : article.body;
+    return content.trim().split(/\s+/).length;
+  };
 
   return (
     <section className="mx-auto w-full max-w-[1420px] space-y-6">
@@ -117,7 +124,7 @@ export default function AgriculturalKnowledgePage() {
                   {article.category}
                 </span>
                 <span className="text-[11px] text-slate-400">
-                  {Math.max(1, Math.ceil(article.body.trim().split(/\s+/).length / 200))} min read
+                  {Math.max(1, Math.ceil(getArticleWordCount(article) / 200))} min read
                 </span>
               </div>
 
@@ -127,14 +134,14 @@ export default function AgriculturalKnowledgePage() {
               <p className="mt-2 text-xs leading-relaxed text-slate-500 line-clamp-2">{article.summary}</p>
 
               <div className="mt-4 flex items-center gap-1 text-xs font-bold text-[#16875f]">
-                Read full article →
+                {article.category.startsWith("Guide:") ? "Read guide →" : "Read full article →"}
               </div>
             </div>
           </article>
         ))}
         {!error && filteredArticles.length === 0 && (
           <p className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600 lg:col-span-2">
-            No knowledge articles are available in the database yet.
+            No available data
           </p>
         )}
       </div>
@@ -160,7 +167,7 @@ export default function AgriculturalKnowledgePage() {
                 </span>
                 <h2 className="mt-2 text-2xl font-extrabold text-[#123d35]">{activeArticleModal.title}</h2>
                 <p className="mt-1 text-xs text-slate-500">
-                  {Math.max(1, Math.ceil(activeArticleModal.body.trim().split(/\s+/).length / 200))} min read · Agronomic Guidance
+                  {Math.max(1, Math.ceil(getArticleWordCount(activeArticleModal) / 200))} min read · Agronomic Guidance
                 </p>
               </div>
               <button
@@ -179,7 +186,23 @@ export default function AgriculturalKnowledgePage() {
                 {activeArticleModal.summary}
               </p>
 
-              <p className="whitespace-pre-wrap">{activeArticleModal.body}</p>
+              {activeGuideSteps ? (
+                <section aria-label="Guide steps">
+                  <h3 className="mb-3 text-sm font-bold text-[#123d35]">Step-by-step guide</h3>
+                  <ol className="space-y-3">
+                    {activeGuideSteps.map((step, index) => (
+                      <li key={`${index}-${step}`} className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-4">
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#e0f5eb] text-xs font-bold text-[#16875f]">
+                          {index + 1}
+                        </span>
+                        <p className="pt-1 whitespace-pre-wrap">{step}</p>
+                      </li>
+                    ))}
+                  </ol>
+                </section>
+              ) : (
+                <p className="whitespace-pre-wrap">{activeArticleModal.body}</p>
+              )}
               {activeArticleModal.evidence_note && (
                 <div className="rounded-xl border border-[#d6e5d3] bg-[#f2f7f0] p-4 text-xs text-[#2d4d2b]">
                   <strong>Evidence note:</strong> {activeArticleModal.evidence_note}
@@ -204,7 +227,7 @@ export default function AgriculturalKnowledgePage() {
                 onClick={() => setActiveArticleModal(null)}
                 className="rounded-xl bg-[#16875f] px-6 py-2.5 text-xs font-bold text-white hover:bg-[#0c704d]"
               >
-                Close Article
+                {activeArticleModal.category.startsWith("Guide:") ? "Close Guide" : "Close Article"}
               </button>
             </footer>
           </div>

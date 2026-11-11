@@ -136,7 +136,7 @@ export default async function AboutPage() {
             </article>
           ))}
           {researchers.length === 0 && (
-            <p className="text-sm text-[#5C635A]">No active agricultural researcher profiles are available.</p>
+            <p className="text-sm text-[#5C635A]">No available data</p>
           )}
         </div>
       </section>

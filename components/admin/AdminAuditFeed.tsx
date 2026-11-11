@@ -144,6 +144,13 @@ export default function AdminAuditFeed({ initialLogs = [] }: AdminAuditFeedProps
                 </td>
               </tr>
             ))}
+            {filteredLogs.length === 0 && (
+              <tr>
+                <td colSpan={6} className="p-6 text-center text-slate-500">
+                  No available data
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

@@ -60,10 +60,13 @@ export interface Crop {
 
 export interface PestDisease {
   id: string;
+  author_id: string | null;
+  author_name?: string;
+  approval_status: "pending" | "approved" | "declined";
   crop_id: string | null;
   crop_name?: string;
   name: string;
-  type: "insect" | "fungus" | "bacterial" | "virus";
+  type: string;
   symptoms: string;
   prevention: string;
   treatment: string;
@@ -80,6 +83,7 @@ export interface Article {
   evidence_note?: string;
   source_url?: string;
   published_at: string | null;
+  approval_status: "pending" | "approved" | "declined";
   created_at: string;
 }
 
@@ -127,6 +131,7 @@ export interface ResearchPublication {
   id: string;
   researcher_id: string;
   researcher_name: string;
+  status: "pending" | "approved" | "declined";
   title: string;
   abstract: string;
   pdf_url: string;
@@ -382,20 +387,22 @@ export async function createFarm(userId: string, farm: { name: string; location:
   }
 }
 
-export async function updateFarm(
-  userId: string,
+async function updateFarmRecord(
+  actorId: string,
   farmId: string,
-  farm: { name: string; location: string; soil_type: string; total_area: number }
+  farm: { name: string; location: string; soil_type: string; total_area: number },
+  isAdmin: boolean
 ): Promise<boolean> {
   const db = getDb();
   const connection = await db.getConnection();
   try {
     await connection.beginTransaction();
+    const ownerFilter = isAdmin ? "" : " AND owner_id = ?";
     const [rows] = await connection.query(
-      "SELECT location_id, total_area FROM farms WHERE id = ? AND owner_id = ? FOR UPDATE",
-      [farmId, userId]
+      `SELECT owner_id, location_id, total_area FROM farms WHERE id = ?${ownerFilter} FOR UPDATE`,
+      isAdmin ? [farmId] : [farmId, actorId]
     );
-    const existing = (rows as Array<{ location_id: number | null; total_area: number }>)[0];
+    const existing = (rows as Array<{ owner_id: string; location_id: number | null; total_area: number }>)[0];
     if (!existing) {
       await connection.rollback();
       return false;
@@ -413,18 +420,21 @@ export async function updateFarm(
     if (locationId) {
       await connection.execute(
         "UPDATE locations SET name = ? WHERE id = ? AND user_id = ?",
-        [farm.location, locationId, userId]
+        [farm.location, locationId, existing.owner_id]
       );
     } else {
       const [locationResult] = await connection.execute(
         "INSERT INTO locations (user_id, name) VALUES (?, ?)",
-        [userId, farm.location]
+        [existing.owner_id, farm.location]
       );
       locationId = (locationResult as { insertId: number }).insertId;
     }
+    const farmOwnerFilter = isAdmin ? "" : " AND owner_id = ?";
     await connection.execute(
-      "UPDATE farms SET name = ?, location_id = ?, soil_type = ?, total_area = ? WHERE id = ? AND owner_id = ?",
-      [farm.name, locationId, farm.soil_type || null, farm.total_area, farmId, userId]
+      `UPDATE farms SET name = ?, location_id = ?, soil_type = ?, total_area = ? WHERE id = ?${farmOwnerFilter}`,
+      isAdmin
+        ? [farm.name, locationId, farm.soil_type || null, farm.total_area, farmId]
+        : [farm.name, locationId, farm.soil_type || null, farm.total_area, farmId, actorId]
     );
     await connection.commit();
   } catch (error) {
@@ -433,8 +443,24 @@ export async function updateFarm(
   } finally {
     connection.release();
   }
-  await addAuditLog(userId, "Updated Farm Parcel", "farms", `Updated farm '${farm.name}' (${farm.total_area} ha)`);
+  await addAuditLog(actorId, "Updated Farm Parcel", "farms", `Updated farm '${farm.name}' (${farm.total_area} ha)`);
   return true;
+}
+
+export async function updateFarm(
+  userId: string,
+  farmId: string,
+  farm: { name: string; location: string; soil_type: string; total_area: number }
+): Promise<boolean> {
+  return updateFarmRecord(userId, farmId, farm, false);
+}
+
+export async function updateAdminFarm(
+  adminId: string,
+  farmId: string,
+  farm: { name: string; location: string; soil_type: string; total_area: number }
+): Promise<boolean> {
+  return updateFarmRecord(adminId, farmId, farm, true);
 }
 
 export async function deleteFarm(userId: string, farmId: string): Promise<boolean> {
@@ -445,6 +471,11 @@ export async function deleteFarm(userId: string, farmId: string): Promise<boolea
   if (!(result as { affectedRows: number }).affectedRows) return false;
   await addAuditLog(userId, "Deleted Farm Parcel", "farms", `Deleted farm parcel '${farmId}'`);
   return true;
+}
+
+export async function deleteAdminFarm(farmId: string): Promise<boolean> {
+  const [result] = await getDb().execute("DELETE FROM farms WHERE id = ?", [farmId]);
+  return (result as { affectedRows: number }).affectedRows > 0;
 }
 
 export async function getFields(userId: string): Promise<Field[]> {
@@ -950,15 +981,28 @@ export async function deleteUserRecord(id: string): Promise<boolean> {
 }
 
 
-export async function getPestsDiseases(): Promise<PestDisease[]> {
+export async function getPestsDiseases(options: { includePending?: boolean; authorId?: string } = {}): Promise<PestDisease[]> {
+  const visibilityFilter = options.includePending
+    ? ""
+    : options.authorId
+      ? "WHERE p.approval_status = 'approved' OR p.author_id = ?"
+      : "WHERE p.approval_status = 'approved'";
+  const params = options.includePending || !options.authorId ? [] : [options.authorId];
   const [rows] = await getDb().query(
-    `SELECT p.id, p.crop_id, c.name AS crop_name, p.name, p.type, p.symptoms, p.prevention, p.treatment
+    `SELECT p.id, p.author_id, author.name AS author_name, p.approval_status, p.crop_id,
+            c.name AS crop_name, p.name, p.type, p.symptoms, p.prevention, p.treatment
      FROM pests_diseases p
      LEFT JOIN crops c ON c.id = p.crop_id
-     ORDER BY p.created_at DESC`
+     LEFT JOIN users author ON author.id = p.author_id
+     ${visibilityFilter}
+     ORDER BY p.created_at DESC`,
+    params
   );
   return (rows as Array<Record<string, unknown>>).map((row) => ({
     id: String(row.id),
+    author_id: row.author_id ? String(row.author_id) : null,
+    author_name: row.author_name ? String(row.author_name) : undefined,
+    approval_status: String(row.approval_status) as PestDisease["approval_status"],
     crop_id: row.crop_id === null ? null : String(row.crop_id),
     crop_name: row.crop_name ? String(row.crop_name) : undefined,
     name: String(row.name),
@@ -969,16 +1013,135 @@ export async function getPestsDiseases(): Promise<PestDisease[]> {
   }));
 }
 
-export async function getArticles(includeDrafts = false): Promise<Article[]> {
-  const visibilityFilter = includeDrafts ? "" : "WHERE a.published_at IS NOT NULL";
+export interface PestDiseaseInput {
+  crop_id: string | null;
+  name: string;
+  type: PestDisease["type"];
+  symptoms: string;
+  prevention: string;
+  treatment: string;
+}
+
+export async function createPestDisease(
+  pest: PestDiseaseInput,
+  authorId: string,
+  approvalStatus: PestDisease["approval_status"] = "pending"
+): Promise<void> {
+  await getDb().execute(
+    `INSERT INTO pests_diseases (author_id, approval_status, crop_id, name, type, symptoms, prevention, treatment)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [authorId, approvalStatus, pest.crop_id, pest.name, pest.type, pest.symptoms, pest.prevention, pest.treatment]
+  );
+}
+
+export async function updatePestDisease(id: string, pest: PestDiseaseInput): Promise<boolean> {
+  const [result] = await getDb().execute(
+    `UPDATE pests_diseases
+     SET crop_id = ?, name = ?, type = ?, symptoms = ?, prevention = ?, treatment = ?
+     WHERE id = ?`,
+    [pest.crop_id, pest.name, pest.type, pest.symptoms, pest.prevention, pest.treatment, id]
+  );
+  if ((result as { affectedRows: number }).affectedRows > 0) return true;
+  const [rows] = await getDb().query("SELECT id FROM pests_diseases WHERE id = ? LIMIT 1", [id]);
+  return (rows as Array<{ id: string }>).length > 0;
+}
+
+export async function updateResearcherPestDisease(
+  id: string,
+  authorId: string,
+  pest: PestDiseaseInput
+): Promise<boolean> {
+  const [result] = await getDb().execute(
+    `UPDATE pests_diseases
+     SET crop_id = ?, name = ?, type = ?, symptoms = ?, prevention = ?, treatment = ?, approval_status = 'pending'
+     WHERE id = ? AND author_id = ?`,
+    [pest.crop_id, pest.name, pest.type, pest.symptoms, pest.prevention, pest.treatment, id, authorId]
+  );
+  if ((result as { affectedRows: number }).affectedRows > 0) return true;
+  const [rows] = await getDb().query(
+    "SELECT id FROM pests_diseases WHERE id = ? AND author_id = ? LIMIT 1",
+    [id, authorId]
+  );
+  return (rows as Array<{ id: string }>).length > 0;
+}
+
+export async function updateResearcherArticle(
+  id: string,
+  authorId: string,
+  article: ArticleInput
+): Promise<boolean> {
+  const [result] = await getDb().execute(
+    `UPDATE knowledge_articles
+     SET title = ?, category = ?, summary = ?, body = ?, evidence_note = ?, source_url = ?,
+         published_at = IF(?, COALESCE(published_at, CURRENT_TIMESTAMP), NULL),
+         approval_status = 'pending'
+     WHERE id = ? AND author_id = ?`,
+    [
+      article.title,
+      article.category,
+      article.summary,
+      article.body,
+      article.evidence_note || null,
+      article.source_url || null,
+      article.published,
+      id,
+      authorId,
+    ]
+  );
+  if ((result as { affectedRows: number }).affectedRows > 0) return true;
+  const [rows] = await getDb().query(
+    "SELECT id FROM knowledge_articles WHERE id = ? AND author_id = ? LIMIT 1",
+    [id, authorId]
+  );
+  return (rows as Array<{ id: string }>).length > 0;
+}
+
+export async function deleteResearcherPestDisease(id: string, authorId: string): Promise<boolean> {
+  const [result] = await getDb().execute(
+    "DELETE FROM pests_diseases WHERE id = ? AND author_id = ?",
+    [id, authorId]
+  );
+  return (result as { affectedRows: number }).affectedRows > 0;
+}
+
+export async function deleteResearcherArticle(id: string, authorId: string): Promise<boolean> {
+  const [result] = await getDb().execute(
+    "DELETE FROM knowledge_articles WHERE id = ? AND author_id = ?",
+    [id, authorId]
+  );
+  return (result as { affectedRows: number }).affectedRows > 0;
+}
+
+export async function deletePestDisease(id: string): Promise<boolean> {
+  const [result] = await getDb().execute("DELETE FROM pests_diseases WHERE id = ?", [id]);
+  return (result as { affectedRows: number }).affectedRows > 0;
+}
+
+export async function getArticles(
+  includeDrafts = false,
+  options: { includePending?: boolean; authorId?: string } = {}
+): Promise<Article[]> {
+  const conditions: string[] = [];
+  const params: string[] = [];
+  if (!includeDrafts) conditions.push("a.published_at IS NOT NULL");
+  if (!options.includePending) {
+    if (options.authorId) {
+      conditions.push("(a.approval_status = 'approved' OR a.author_id = ?)");
+      params.push(options.authorId);
+    } else {
+      conditions.push("a.approval_status = 'approved'");
+    }
+  }
+  const visibilityFilter = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
   const [rows] = await getDb().query(
     `SELECT a.id, a.author_id, u.name AS author_name, a.title, a.category, a.summary, a.body,
-            a.evidence_note, a.source_url, a.published_at,
+            a.evidence_note, a.source_url, a.published_at, a.approval_status,
             COALESCE(a.published_at, a.created_at) AS created_at
      FROM knowledge_articles a
      LEFT JOIN users u ON u.id = a.author_id
      ${visibilityFilter}
-     ORDER BY COALESCE(a.published_at, a.created_at) DESC`
+     ORDER BY COALESCE(a.published_at, a.created_at) DESC`,
+    params
   );
   return (rows as Array<Record<string, unknown>>).map((row) => ({
     id: String(row.id),
@@ -991,6 +1154,7 @@ export async function getArticles(includeDrafts = false): Promise<Article[]> {
     evidence_note: row.evidence_note ? String(row.evidence_note) : undefined,
     source_url: row.source_url ? String(row.source_url) : undefined,
     published_at: row.published_at ? String(row.published_at) : null,
+    approval_status: String(row.approval_status) as Article["approval_status"],
     created_at: String(row.created_at),
   }));
 }
@@ -1005,11 +1169,15 @@ export interface ArticleInput {
   published: boolean;
 }
 
-export async function createArticle(authorId: string, article: ArticleInput): Promise<void> {
+export async function createArticle(
+  authorId: string,
+  article: ArticleInput,
+  approvalStatus: Article["approval_status"] = "pending"
+): Promise<void> {
   await getDb().execute(
     `INSERT INTO knowledge_articles
-      (author_id, title, category, summary, body, evidence_note, source_url, published_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, IF(?, CURRENT_TIMESTAMP, NULL))`,
+      (author_id, title, category, summary, body, evidence_note, source_url, published_at, approval_status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, IF(?, CURRENT_TIMESTAMP, NULL), ?)`,
     [
       authorId,
       article.title,
@@ -1019,6 +1187,7 @@ export async function createArticle(authorId: string, article: ArticleInput): Pr
       article.evidence_note || null,
       article.source_url || null,
       article.published,
+      approvalStatus,
     ]
   );
 }
@@ -1027,7 +1196,8 @@ export async function updateArticle(id: string, article: ArticleInput): Promise<
   const [result] = await getDb().execute(
     `UPDATE knowledge_articles
      SET title = ?, category = ?, summary = ?, body = ?, evidence_note = ?, source_url = ?,
-         published_at = IF(?, COALESCE(published_at, CURRENT_TIMESTAMP), NULL)
+         published_at = IF(?, COALESCE(published_at, CURRENT_TIMESTAMP), NULL),
+         approval_status = 'approved'
      WHERE id = ?`,
     [
       article.title,
@@ -1047,6 +1217,38 @@ export async function updateArticle(id: string, article: ArticleInput): Promise<
 
 export async function deleteArticle(id: string): Promise<boolean> {
   const [result] = await getDb().execute("DELETE FROM knowledge_articles WHERE id = ?", [id]);
+  return (result as { affectedRows: number }).affectedRows > 0;
+}
+
+export async function approvePestDisease(id: string): Promise<boolean> {
+  const [result] = await getDb().execute(
+    "UPDATE pests_diseases SET approval_status = 'approved' WHERE id = ? AND approval_status = 'pending'",
+    [id]
+  );
+  return (result as { affectedRows: number }).affectedRows > 0;
+}
+
+export async function declinePestDisease(id: string): Promise<boolean> {
+  const [result] = await getDb().execute(
+    "UPDATE pests_diseases SET approval_status = 'declined' WHERE id = ? AND approval_status = 'pending'",
+    [id]
+  );
+  return (result as { affectedRows: number }).affectedRows > 0;
+}
+
+export async function approveKnowledgeArticle(id: string): Promise<boolean> {
+  const [result] = await getDb().execute(
+    "UPDATE knowledge_articles SET approval_status = 'approved' WHERE id = ? AND approval_status = 'pending' AND published_at IS NOT NULL",
+    [id]
+  );
+  return (result as { affectedRows: number }).affectedRows > 0;
+}
+
+export async function declineKnowledgeArticle(id: string): Promise<boolean> {
+  const [result] = await getDb().execute(
+    "UPDATE knowledge_articles SET approval_status = 'declined' WHERE id = ? AND approval_status = 'pending' AND published_at IS NOT NULL",
+    [id]
+  );
   return (result as { affectedRows: number }).affectedRows > 0;
 }
 
@@ -1322,18 +1524,32 @@ export async function addConsultationReply(userId: string, userName: string, use
   return reply;
 }
 
-export async function getPublications(): Promise<ResearchPublication[]> {
+export async function getPublications(options: { includePending?: boolean; researcherId?: string } = {}): Promise<ResearchPublication[]> {
+  const conditions: string[] = [];
+  const params: string[] = [];
+  if (!options.includePending) {
+    if (options.researcherId) {
+      conditions.push("(p.status = 'approved' OR p.researcher_id = ?)");
+      params.push(options.researcherId);
+    } else {
+      conditions.push("p.status = 'approved'");
+    }
+  }
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
   const [rows] = await getDb().query(
-    `SELECT p.id, p.researcher_id, u.name AS researcher_name, p.title, p.abstract, p.pdf_url,
+    `SELECT p.id, p.researcher_id, u.name AS researcher_name, p.status, p.title, p.abstract, p.pdf_url,
             p.crop_type, p.soil_type, DATE_FORMAT(p.publication_date, '%Y-%m-%d') AS publication_date, p.created_at
      FROM research_publications p
      JOIN users u ON u.id = p.researcher_id
-     ORDER BY p.publication_date DESC, p.created_at DESC`
+     ${whereClause}
+     ORDER BY p.publication_date DESC, p.created_at DESC`,
+    params
   );
   return (rows as Array<Record<string, unknown>>).map((row) => ({
     id: String(row.id),
     researcher_id: String(row.researcher_id),
     researcher_name: String(row.researcher_name),
+    status: String(row.status) as ResearchPublication["status"],
     title: String(row.title),
     abstract: String(row.abstract),
     pdf_url: String(row.pdf_url),
@@ -1350,6 +1566,7 @@ export async function createPublication(userId: string, userName: string, data: 
     id,
     researcher_id: userId,
     researcher_name: userName,
+    status: "pending",
     title: data.title,
     abstract: data.abstract,
     pdf_url: data.pdf_url,
@@ -1359,11 +1576,95 @@ export async function createPublication(userId: string, userName: string, data: 
     created_at: new Date().toISOString()
   };
   await getDb().execute(
-    "INSERT INTO research_publications (id, researcher_id, title, abstract, pdf_url, crop_type, soil_type, publication_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    "INSERT INTO research_publications (id, researcher_id, title, abstract, pdf_url, crop_type, soil_type, publication_date, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')",
     [id, userId, data.title, data.abstract, data.pdf_url, data.crop_type, data.soil_type, pub.publication_date]
   );
-  await addAuditLog(userId, "Published Research Paper", "research_publications", `Published paper: '${data.title}'`);
+  await addAuditLog(userId, "Submitted Research Paper for Approval", "research_publications", `Submitted paper: '${data.title}'`);
   return pub;
+}
+
+export interface PublicationInput {
+  title: string;
+  abstract: string;
+  pdf_url: string;
+  crop_type: string;
+  soil_type: string;
+}
+
+export async function updatePublication(
+  userId: string,
+  publicationId: string,
+  data: PublicationInput
+): Promise<boolean> {
+  const [result] = await getDb().execute(
+    `UPDATE research_publications
+     SET title = ?, abstract = ?, pdf_url = ?, crop_type = ?, soil_type = ?, status = 'pending'
+     WHERE id = ? AND researcher_id = ?`,
+    [data.title, data.abstract, data.pdf_url, data.crop_type, data.soil_type, publicationId, userId]
+  );
+  const updated = (result as { affectedRows: number }).affectedRows > 0;
+  if (!updated) {
+    const [rows] = await getDb().query(
+      "SELECT id FROM research_publications WHERE id = ? AND researcher_id = ? LIMIT 1",
+      [publicationId, userId]
+    );
+    if ((rows as Array<{ id: string }>).length === 0) return false;
+  }
+
+  await addAuditLog(
+    userId,
+    "Updated Research Paper",
+    "research_publications",
+    `Updated paper: '${data.title}'`
+  );
+  return true;
+}
+
+export async function updateAdminPublication(
+  publicationId: string,
+  data: PublicationInput
+): Promise<boolean> {
+  const [result] = await getDb().execute(
+    `UPDATE research_publications
+     SET title = ?, abstract = ?, pdf_url = ?, crop_type = ?, soil_type = ?
+     WHERE id = ?`,
+    [data.title, data.abstract, data.pdf_url, data.crop_type, data.soil_type, publicationId]
+  );
+  if ((result as { affectedRows: number }).affectedRows > 0) return true;
+
+  const [rows] = await getDb().query(
+    "SELECT id FROM research_publications WHERE id = ? LIMIT 1",
+    [publicationId]
+  );
+  return (rows as Array<{ id: string }>).length > 0;
+}
+
+export async function deletePublication(userId: string, publicationId: string): Promise<boolean> {
+  const [result] = await getDb().execute(
+    "DELETE FROM research_publications WHERE id = ? AND researcher_id = ?",
+    [publicationId, userId]
+  );
+  const deleted = (result as { affectedRows: number }).affectedRows > 0;
+  if (deleted) {
+    await addAuditLog(userId, "Deleted Research Paper", "research_publications", `Deleted paper #${publicationId}`);
+  }
+  return deleted;
+}
+
+export async function deleteAdminPublication(publicationId: string): Promise<boolean> {
+  const [result] = await getDb().execute(
+    "DELETE FROM research_publications WHERE id = ?",
+    [publicationId]
+  );
+  return (result as { affectedRows: number }).affectedRows > 0;
+}
+
+export async function setPublicationStatus(publicationId: string, status: "approved" | "declined"): Promise<boolean> {
+  const [result] = await getDb().execute(
+    "UPDATE research_publications SET status = ? WHERE id = ? AND status = 'pending'",
+    [status, publicationId]
+  );
+  return (result as { affectedRows: number }).affectedRows > 0;
 }
 
 export async function getAuditLogs(): Promise<AuditLog[]> {

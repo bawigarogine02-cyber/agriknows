@@ -209,7 +209,7 @@ export default function DashboardHeader({
                   </div>
                 )}
                 {!notificationsLoading && !notificationsError && notifications.length === 0 && (
-                  <p className="px-4 py-8 text-center text-sm text-slate-500">You are all caught up.</p>
+                  <p className="px-4 py-8 text-center text-sm text-slate-500">No available data</p>
                 )}
                 {!notificationsLoading && !notificationsError && notifications.map((notification) => (
                   <button

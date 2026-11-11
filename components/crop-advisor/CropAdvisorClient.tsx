@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { getAccurateUserLocation } from "@/lib/utils/geolocation";
 import type { CropAdvisorAnalysis } from "@/lib/db/repository";
+import ConfirmActionDialog from "@/components/ui/ConfirmActionDialog";
 
 interface CropAdvisorClientProps {
   initialAnalyses: CropAdvisorAnalysis[];
@@ -59,6 +60,7 @@ export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClient
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [savedToast, setSavedToast] = useState<string | null>(null);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [analysisPendingDelete, setAnalysisPendingDelete] = useState<CropAdvisorAnalysis | null>(null);
   const [historySearchQuery, setHistorySearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"recommendations" | "evidence" | "missing_info">("recommendations");
 
@@ -141,20 +143,15 @@ export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClient
     }
   };
 
-  const deleteHistoryItem = async (e: React.MouseEvent, id: string) => {
-    e.stopPropagation();
-    try {
-      const response = await fetch(`/api/crop-advisor?id=${id}`, { method: "DELETE" });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Unable to delete the analysis.");
+  const deleteHistoryItem = async (id: string) => {
+    const response = await fetch(`/api/crop-advisor?id=${id}`, { method: "DELETE" });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Unable to delete the analysis.");
 
-      const updated = analysesHistory.filter((analysis) => analysis.id !== id);
-      setAnalysesHistory(updated);
-      if (currentAnalysis?.id === id) {
-        setCurrentAnalysis(updated.length > 0 ? updated[0] : null);
-      }
-    } catch (error) {
-      setErrorMsg(error instanceof Error ? error.message : "Unable to delete the analysis.");
+    const updated = analysesHistory.filter((analysis) => analysis.id !== id);
+    setAnalysesHistory(updated);
+    if (currentAnalysis?.id === id) {
+      setCurrentAnalysis(updated.length > 0 ? updated[0] : null);
     }
   };
 
@@ -240,6 +237,19 @@ export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClient
                 {analysesHistory.length}
               </span>
             )}
+            <ConfirmActionDialog
+              isOpen={analysisPendingDelete !== null}
+              title="Delete crop analysis?"
+              description={analysisPendingDelete
+                ? `Delete the saved analysis for "${analysisPendingDelete.location_name || "Field Parcel Analysis"}"? This cannot be undone.`
+                : ""}
+              confirmLabel="Delete analysis"
+              onClose={() => setAnalysisPendingDelete(null)}
+              onConfirm={async () => {
+                if (analysisPendingDelete) await deleteHistoryItem(analysisPendingDelete.id);
+                setAnalysisPendingDelete(null);
+              }}
+            />
           </button>
         </div>
       </div>
@@ -519,7 +529,7 @@ export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClient
               <div className="grid gap-6 md:grid-cols-2">
                 {qualifyingRecommendations.length === 0 && (
                   <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 md:col-span-2">
-                    No crop candidates were available for this analysis. Check the external research tab for search status, or try a new analysis with a location and clearer land image.
+                    No available data. Check the external research tab for search status, or try a new analysis with a location and clearer land image.
                     {displayedWebResearchStatus && (
                       <span className="mt-2 block text-xs">{displayedWebResearchStatus}</span>
                     )}
@@ -695,7 +705,7 @@ export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClient
                     ))}
                     {relevantInternalResearch.length === 0 && (
                       <p className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-slate-600">
-                        No internal study matched the crop candidates in this analysis.
+                        No available data
                       </p>
                     )}
                   </div>
@@ -735,7 +745,7 @@ export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClient
                     ))}
                     {relevantWebResearch.length === 0 && (
                       <p className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-slate-600">
-                        {displayedWebResearchStatus || "No relevant external citation was saved for this analysis."}
+                        {displayedWebResearchStatus || "No available data"}
                       </p>
                     )}
                   </div>
@@ -847,7 +857,7 @@ export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClient
               {filteredHistory.length === 0 ? (
                 <div className="py-12 text-center text-slate-500">
                   <Sprout className="mx-auto h-10 w-10 text-slate-300 mb-2" />
-                  <p className="text-sm font-semibold">No saved crop advisor analyses found</p>
+                  <p className="text-sm font-semibold">No available data</p>
                   <p className="text-xs">Upload your land photo to automatically save recommendations to history.</p>
                 </div>
               ) : (
@@ -884,7 +894,10 @@ export default function CropAdvisorClient({ initialAnalyses }: CropAdvisorClient
                       <button
                         type="button"
                         title="Delete from history"
-                        onClick={(e) => deleteHistoryItem(e, item.id)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setAnalysisPendingDelete(item);
+                        }}
                         className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition"
                       >
                         <Trash2 size={16} />

@@ -36,6 +36,7 @@ export default async function ConsultationsPage() {
         initialPublications={publications}
         crops={crops}
         userRole={session.role}
+        currentUserId={session.id}
       />
     </div>
   );

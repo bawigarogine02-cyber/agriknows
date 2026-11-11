@@ -1,6 +1,6 @@
 import KnowledgeBaseExplorer from "@/components/knowledge-base/KnowledgeBaseExplorer";
 import { getSession } from "@/lib/auth/session";
-import { getArticles, getCrops, getPestsDiseases } from "@/lib/db/repository";
+import { getArticles, getCrops, getPestsDiseases, getPublications } from "@/lib/db/repository";
 import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -11,10 +11,11 @@ export default async function KnowledgeBasePage() {
     redirect("/login?next=/knowledge-base");
   }
 
-  const [crops, pests, articles] = await Promise.all([
+  const [crops, pests, articles, publications] = await Promise.all([
     getCrops(),
     getPestsDiseases(),
-    getArticles()
+    getArticles(),
+    getPublications(),
   ]);
 
   return (
@@ -31,7 +32,14 @@ export default async function KnowledgeBasePage() {
         </p>
       </header>
 
-      <KnowledgeBaseExplorer crops={crops} pests={pests} articles={articles} />
+      <KnowledgeBaseExplorer
+        crops={crops}
+        pests={pests}
+        articles={articles}
+        publications={publications}
+        userRole={session.role}
+        currentUserId={session.id}
+      />
     </div>
   );
 }

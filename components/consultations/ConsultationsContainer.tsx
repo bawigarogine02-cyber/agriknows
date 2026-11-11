@@ -13,6 +13,7 @@ interface ConsultationsContainerProps {
   initialPublications: ResearchPublication[];
   crops: Crop[];
   userRole?: string;
+  currentUserId: string;
 }
 
 export default function ConsultationsContainer({
@@ -20,12 +21,14 @@ export default function ConsultationsContainer({
   initialPublications,
   crops,
   userRole,
+  currentUserId,
 }: ConsultationsContainerProps) {
   const [activeTab, setActiveTab] = useState<"inquiries" | "publications">("inquiries");
   const [consultations, setConsultations] = useState<Consultation[]>(initialConsultations);
   const [publications, setPublications] = useState<ResearchPublication[]>(initialPublications);
   const [isAskModalOpen, setIsAskModalOpen] = useState(false);
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
+  const [editingPublication, setEditingPublication] = useState<ResearchPublication | null>(null);
 
   async function reloadConsultations() {
     try {
@@ -97,7 +100,10 @@ export default function ConsultationsContainer({
         <ResearchPublicationsFeed
           publications={publications}
           userRole={userRole}
+          currentUserId={currentUserId}
           onOpenPublishModal={() => setIsPublishModalOpen(true)}
+          onEditPublication={setEditingPublication}
+          onRefresh={reloadPublications}
         />
       )}
 
@@ -110,12 +116,19 @@ export default function ConsultationsContainer({
       />
 
       {/* Publish Research Paper Modal */}
-      <PublishResearchModal
-        isOpen={isPublishModalOpen}
-        crops={crops}
-        onClose={() => setIsPublishModalOpen(false)}
-        onSuccess={reloadPublications}
-      />
+      {(isPublishModalOpen || editingPublication !== null) && (
+        <PublishResearchModal
+          key={editingPublication?.id || "new-publication"}
+          isOpen
+          crops={crops}
+          initialPublication={editingPublication}
+          onClose={() => {
+            setIsPublishModalOpen(false);
+            setEditingPublication(null);
+          }}
+          onSuccess={reloadPublications}
+        />
+      )}
     </div>
   );
 }

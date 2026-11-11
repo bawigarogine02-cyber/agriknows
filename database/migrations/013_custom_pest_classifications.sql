@@ -1,0 +1,2 @@
+ALTER TABLE pests_diseases
+  MODIFY COLUMN type VARCHAR(80) NOT NULL DEFAULT 'insect';

@@ -264,11 +264,11 @@ export default function DecisionEngine({ fields, recentRecommendations }: Decisi
           )}
 
           {/* Historical Advisory Log */}
-          {recentRecommendations.length > 0 && (
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
-              <h4 className="text-sm font-bold text-slate-700">Recent Rule Output History</h4>
-              <div className="mt-4 divide-y divide-slate-100">
-                {recentRecommendations.slice(0, 3).map((r) => (
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
+            <h4 className="text-sm font-bold text-slate-700">Recent Rule Output History</h4>
+            <div className="mt-4 divide-y divide-slate-100">
+              {recentRecommendations.length > 0 ? (
+                recentRecommendations.slice(0, 3).map((r) => (
                   <div key={r.id} className="py-3 text-xs">
                     <div className="flex items-center justify-between">
                       <span className="font-bold text-[#123d35]">{r.field_name || "Field Plot"}</span>
@@ -278,10 +278,12 @@ export default function DecisionEngine({ fields, recentRecommendations }: Decisi
                     </div>
                     <p className="mt-1 text-slate-600 line-clamp-2">{r.output_text?.replace(/\*/g, "")}</p>
                   </div>
-                ))}
-              </div>
+                ))
+              ) : (
+                <p className="py-3 text-xs text-slate-500">No available data</p>
+              )}
             </div>
-          )}
+          </div>
         </section>
       </div>
     </div>

@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import AddCropModal from "./AddCropModal";
 import type { CropItem } from "./crop-types";
+import ConfirmActionDialog from "@/components/ui/ConfirmActionDialog";
 
 export type { CropItem } from "./crop-types";
 
@@ -28,11 +29,10 @@ export default function FarmerCropsPage({
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedCropModal, setSelectedCropModal] = useState<CropItem | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [cropPendingDelete, setCropPendingDelete] = useState<CropItem | null>(null);
   const [error, setError] = useState("");
 
   const fetchCrops = useCallback(async () => {
-    setIsLoading(true);
     setError("");
     try {
       const res = await fetch("/api/crops");
@@ -56,8 +56,6 @@ export default function FarmerCropsPage({
       })));
     } catch (fetchError) {
       setError(fetchError instanceof Error ? fetchError.message : "Failed to fetch crops.");
-    } finally {
-      setIsLoading(false);
     }
   }, []);
 
@@ -68,22 +66,16 @@ export default function FarmerCropsPage({
     return () => window.clearTimeout(timer);
   }, [fetchCrops]);
 
-  const handleDeleteCrop = async (id: string, name: string) => {
-    if (!confirm(`Are you sure you want to remove "${name}" from your catalog?`)) return;
-    setError("");
-    try {
-      const response = await fetch("/api/crops", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Failed to remove crop.");
-      await fetchCrops();
-      if (selectedCropModal?.id === id) setSelectedCropModal(null);
-    } catch (deleteError) {
-      setError(deleteError instanceof Error ? deleteError.message : "Failed to remove crop.");
-    }
+  const handleDeleteCrop = async (crop: CropItem) => {
+    const response = await fetch("/api/crops", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: crop.id }),
+    });
+    const data: { error?: string } = await response.json();
+    if (!response.ok) throw new Error(data.error || "Failed to remove crop.");
+    setCrops((current) => current.filter((item) => item.id !== crop.id));
+    if (selectedCropModal?.id === crop.id) setSelectedCropModal(null);
   };
 
   const categories = ["All", ...new Set(crops.map((crop) => crop.category).filter((category) => Boolean(category)))];
@@ -208,7 +200,7 @@ export default function FarmerCropsPage({
       {filteredCrops.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center shadow-sm">
           <Sprout className="mx-auto h-12 w-12 text-slate-300" />
-          <h3 className="mt-3 text-lg font-bold text-slate-700">No crops found</h3>
+          <h3 className="mt-3 text-lg font-bold text-slate-700">No available data</h3>
           <p className="mt-1 text-xs text-slate-500">
             {search ? `No results match your search "${search}"` : "Get started by adding your first crop profile."}
           </p>
@@ -226,11 +218,6 @@ export default function FarmerCropsPage({
         </div>
       ) : (
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {!isLoading && filteredCrops.length === 0 && (
-            <p className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600 sm:col-span-2 lg:col-span-3">
-              No crops are available in the database yet.
-            </p>
-          )}
           {filteredCrops.map((crop) => (
             <article
               key={crop.id}
@@ -287,7 +274,7 @@ export default function FarmerCropsPage({
                 </button>
                 {canDeleteCrop && <button
                   type="button"
-                  onClick={() => handleDeleteCrop(crop.id, crop.name)}
+                  onClick={() => setCropPendingDelete(crop)}
                   aria-label={`Delete ${crop.name}`}
                   className="p-1.5 text-slate-400 hover:text-rose-600 transition"
                 >
@@ -328,6 +315,19 @@ export default function FarmerCropsPage({
                 {selectedCropModal.type && (
                   <p className="text-xs font-semibold text-[#16875f] mt-0.5">{selectedCropModal.type}</p>
                 )}
+                <ConfirmActionDialog
+                  isOpen={cropPendingDelete !== null}
+                  title="Remove crop from catalog?"
+                  description={cropPendingDelete
+                    ? `Remove "${cropPendingDelete.name}" from your catalog? This cannot be undone.`
+                    : ""}
+                  confirmLabel="Remove crop"
+                  onClose={() => setCropPendingDelete(null)}
+                  onConfirm={async () => {
+                    if (cropPendingDelete) await handleDeleteCrop(cropPendingDelete);
+                    setCropPendingDelete(null);
+                  }}
+                />
               </div>
               <button
                 type="button"

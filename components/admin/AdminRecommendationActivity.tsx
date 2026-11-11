@@ -53,8 +53,7 @@ export default function AdminRecommendationActivity({ recommendations }: { recom
         {recommendations.length === 0 ? (
           <div className="px-6 py-14 text-center text-slate-500">
             <BarChart3 className="mx-auto h-9 w-9 text-slate-300" />
-            <p className="mt-3 text-lg font-semibold text-slate-700">No recommendations generated yet</p>
-            <p className="mt-1 text-sm">New advisory runs will appear here for admin review.</p>
+            <p className="mt-3 text-lg font-semibold text-slate-700">No available data</p>
           </div>
         ) : (
           <div className="overflow-x-auto">

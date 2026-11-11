@@ -202,7 +202,7 @@ export default function ReportsAnalytics({ fields, recommendations }: ReportsAna
               ))}
               {filteredRecommendations.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="p-6 text-center text-slate-500">No database records match these filters.</td>
+                  <td colSpan={7} className="p-6 text-center text-slate-500">No available data</td>
                 </tr>
               )}
             </tbody>

@@ -66,7 +66,7 @@ export async function GET() {
   if (access.response) return access.response;
 
   try {
-    return NextResponse.json({ articles: await getArticles(true) });
+    return NextResponse.json({ articles: await getArticles(true, { includePending: true }) });
   } catch (error) {
     console.error("Knowledge articles could not be loaded:", error);
     return NextResponse.json({ error: "Unable to load knowledge articles." }, { status: 500 });
@@ -85,7 +85,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    await createArticle(access.user.id, article);
+    await createArticle(access.user.id, article, article.published ? "approved" : "pending");
     await addAuditLog(
       access.user.id,
       article.published ? "Published Knowledge Article" : "Created Knowledge Article",
@@ -142,7 +142,7 @@ export async function DELETE(request: Request) {
   }
 
   try {
-    const article = (await getArticles(true)).find((item) => item.id === id);
+    const article = (await getArticles(true, { includePending: true })).find((item) => item.id === id);
     if (!article || !(await deleteArticle(id))) {
       return NextResponse.json({ error: "Knowledge article not found." }, { status: 404 });
     }

@@ -97,7 +97,7 @@ export default function SettingsPage() {
                 <p className="mt-2 text-slate-500">
                   Location: {selectedFarm?.location || "No location recorded for this farm"}
                 </p>
-                {farms.length === 0 && <p className="mt-2 text-slate-500">Create a farm record to select a default location.</p>}
+                {farms.length === 0 && <p className="mt-2 text-slate-500">No available data</p>}
               </div>
 
               <div>
